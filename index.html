@@ -42,6 +42,9 @@ header.top{position:sticky;top:0;background:var(--card);border-bottom:1px solid 
 .side h3{font-size:1.05rem;margin-bottom:10px}
 .side .row{margin-bottom:10px}
 .empty{color:var(--mute);margin:0}
+img.av{object-fit:cover}
+.pimg{width:100%;max-height:560px;object-fit:cover;border-radius:12px;margin:6px 0 10px;display:block}
+input[type=file]{padding:8px}
 .foot{max-width:980px;margin:0 auto;padding:8px 16px 32px;display:flex;gap:16px}
 .foot a{color:var(--mute)}
 </style>
@@ -63,20 +66,23 @@ function el(tag,attrs,kids){var e=document.createElement(tag);for(var k in attrs
 function say(t,ok){notice={text:t,ok:!!ok}}
 function ago(t){var m=Math.floor((Date.now()-new Date(t).getTime())/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.floor(m/60)+" h ago":Math.floor(m/1440)+" d ago"}
 function nm(id){var p=D&&D.names[id];return p||"Someone"}
-function av(id){var h=0;for(var i=0;i<id.length;i++)h=(h+id.charCodeAt(i))%COLORS.length;var e=el("div",{class:"av"},[nm(id).charAt(0).toUpperCase()]);e.style.background=COLORS[h];return e}
+function av(id){var pic=D&&D.avatars&&D.avatars[id];if(pic)return el("img",{class:"av",src:pic,alt:""});var h=0;for(var i=0;i<id.length;i++)h=(h+id.charCodeAt(i))%COLORS.length;var e=el("div",{class:"av"},[nm(id).charAt(0).toUpperCase()]);e.style.background=COLORS[h];return e}
 async function act(fn){try{await fn()}catch(e){say(e.message||"Something went wrong. Try again.")}await refresh()}
 
 async function loadData(){
 var r=await Promise.all([
-sb.from("profiles").select("id,name"),
+sb.from("profiles").select("id,name,avatar_url"),
 sb.from("posts").select("id,user_id,body,created_at").order("created_at",{ascending:false}).limit(60),
 sb.from("likes").select("post_id,user_id"),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
 sb.from("friendships").select("id,requester,addressee,status"),
 sb.from("blocks").select("blocked")]);
 for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;
-var names={};r[0].data.forEach(function(p){names[p.id]=p.name});
-D={names:names,posts:r[1].data,likes:r[2].data,comments:r[3].data,fs:r[4].data,blocked:r[5].data.map(function(b){return b.blocked})}}
+var names={},avatars={};r[0].data.forEach(function(p){names[p.id]=p.name;if(p.avatar_url)avatars[p.id]=p.avatar_url});
+D={names:names,posts:r[1].data,likes:r[2].data,comments:r[3].data,fs:r[4].data,blocked:r[5].data.map(function(b){return b.blocked}),avatars:avatars,imgs:{}};
+var paths=D.posts.filter(function(p){return p.image_path}).map(function(p){return p.image_path});
+if(paths.length){var su=await sb.storage.from("post-images").createSignedUrls(paths,3600);
+if(!su.error)su.data.forEach(function(x){if(x.signedUrl)D.imgs[x.path]=x.signedUrl})}}
 
 async function refresh(){
 var s=(await sb.auth.getSession()).data.session;
@@ -110,13 +116,25 @@ return el("main",{class:"auth"},[el("div",{class:"logo"},["Futurebook"]),el("p",
 el("div",{class:"card"},[name,email,pw,el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text]),el("div",{class:"row"},[go,sw])]),
 el("p",{style:"font-size:.9rem"},["By creating an account you agree to our ",el("a",{href:"terms.html"},["Terms"])," and ",el("a",{href:"privacy.html"},["Privacy Policy"]),"."])])}
 
+function shrink(file,max){return new Promise(function(res,rej){var img=new Image(),u=URL.createObjectURL(file);
+img.onload=function(){var k=Math.min(1,max/Math.max(img.width,img.height));var c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(function(b){b?res(b):rej(new Error("Couldn’t read that image."))},"image/jpeg",0.82)};
+img.onerror=function(){rej(new Error("That file isn’t a supported image. Use a JPG, PNG or WebP."))};img.src=u})}
+function avInput(){return el("input",{type:"file",id:"avfile",accept:"image/jpeg,image/png,image/webp","aria-label":"Choose a profile photo",style:"display:none",onchange:function(e){var f=e.target.files[0];if(!f)return;
+act(async function(){var b=await shrink(f,320);var path=me.id+"/avatar.jpg";
+var up=await sb.storage.from("avatars").upload(path,b,{contentType:"image/jpeg",upsert:true});if(up.error)throw up.error;
+var url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl+"?v="+Date.now();
+var r=await sb.from("profiles").update({avatar_url:url}).eq("id",me.id);if(r.error)throw r.error;say("Profile photo updated.",true)})}})}
 function feed(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
-var box=el("div",{class:"card"},[ta,el("button",{class:"btn",onclick:function(){var v=ta.value.trim();if(!v)return;
-act(async function(){var r=await sb.from("posts").insert({user_id:me.id,body:v});if(r.error)throw r.error;say("")})}},["Post"])]);
+var pic=el("input",{type:"file",accept:"image/jpeg,image/png,image/webp","aria-label":"Add a photo"});
+var box=el("div",{class:"card"},[ta,pic,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f)return;
+act(async function(){var path=null;
+if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error}
+var r=await sb.from("posts").insert({user_id:me.id,body:v||" ",image_path:path});if(r.error)throw r.error;say("")})}},["Post"])]);
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
 return el("div",{},[
-el("header",{class:"top"},[el("div",{class:"logo"},["Futurebook"]),el("div",{class:"row"},[av(me.id),el("b",{},[nm(me.id)]),
+el("header",{class:"top"},[el("div",{class:"logo"},["Futurebook"]),el("div",{class:"row"},[av(me.id),el("b",{},[nm(me.id)]),avInput(),el("button",{class:"link",onclick:function(){document.getElementById("avfile").click()}},["Change photo"]),
 el("button",{class:"link",onclick:function(){refresh()}},["Refresh"]),
 el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");await refresh()}},["Log out"])])]),
 el("div",{class:"wrap"},[el("main",{},[el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text]),box,list]),side()]),
@@ -139,10 +157,11 @@ acts.push(el("button",{onclick:function(){if(!confirm("Block "+nm(p.user_id)+"? 
 act(async function(){var u=p.user_id;var r=await sb.from("blocks").insert({blocker:me.id,blocked:u});if(r.error)throw r.error;
 var d=await sb.from("friendships").delete().or("and(requester.eq."+me.id+",addressee.eq."+u+"),and(requester.eq."+u+",addressee.eq."+me.id+")");if(d.error)throw d.error;say(nm(u)+" is blocked.",true)})}},["Block"]));
 }
-if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delete this post?"))act(async function(){var r=await sb.from("posts").delete().eq("id",p.id);if(r.error)throw r.error})}},["Delete"]));
+if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delete this post?"))act(async function(){var r=await sb.from("posts").delete().eq("id",p.id);if(r.error)throw r.error;if(p.image_path)await sb.storage.from("post-images").remove([p.image_path])})}},["Delete"]));
 return el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("b",{},[nm(p.user_id)]),el("small",{},[ago(p.created_at)])])]),
-el("p",{},[p.body]),
+p.body.trim()?el("p",{},[p.body]):"",
+p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:"Photo shared by "+nm(p.user_id),loading:"lazy"}):"",
 el("div",{class:"acts"},acts),
 el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("b",{},[nm(c.user_id)]),c.body])})),
 el("div",{style:"margin-top:8px"},[cin])])}
