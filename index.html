@@ -152,6 +152,13 @@ button.rsum:hover{text-decoration:underline}
 .pollo i{position:absolute;inset:0 auto 0 0;background:var(--soft);z-index:0}.pollo span{position:relative;z-index:1}
 .lnk{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;color:var(--pri);overflow-wrap:anywhere}
 .panel{display:none;margin-bottom:8px}
+.pmenu{position:relative;margin-left:auto}
+.pmenu>button{background:none;border:0;font-size:1.4rem;line-height:1;padding:4px 10px;border-radius:50%;color:var(--mute)}
+.pmenu>button:hover{background:var(--soft)}
+.pm-pop{position:absolute;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px;z-index:30;min-width:200px;display:flex;flex-direction:column;gap:2px}
+.pm-pop button{background:none;border:0;text-align:left;padding:8px 12px;border-radius:8px;font-weight:600}
+.pm-pop button:hover{background:var(--soft)}
+.pm-pop select{margin:2px 0 0;width:100%}
 </style>
 </head>
 <body>
@@ -438,7 +445,7 @@ if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),el("a",{
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
 return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept request"]),del("Decline",null)]}
 
-var editing=false,draft=null,X={};
+var editing=false,draft=null,X={},openMenu=null;
 var REL=["Single","In a relationship","Engaged","Married","It's complicated","Prefer not to say"];
 function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:""}
 function isFriend(id){return D.fs.some(function(f){return f.status==="accepted"&&((f.requester===me.id&&f.addressee===id)||(f.requester===id&&f.addressee===me.id))})}
@@ -878,7 +885,12 @@ var d=await sb.from("friendships").delete().or("and(requester.eq."+me.id+",addre
 }
 if(p.user_id===me.id)ownActs(p).forEach(function(x){acts.push(x)});
 if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delete this post?"))act(async function(){var r=await sb.from("posts").delete().eq("id",p.id);if(r.error)throw r.error;await sb.storage.from("post-images").remove(allPaths(p))})}},["Delete"]));
-return el("article",{class:"card post"},[
+var menu=acts.splice(4),menuEl="";
+if(menu.length){menu.forEach(function(x){if(x.tagName==="BUTTON")x.className="pmi"});
+var pop=el("div",{class:"pm-pop",role:"menu"},menu);
+pop.addEventListener("click",function(){setTimeout(function(){openMenu=null},0)});
+menuEl=el("div",{class:"pmenu"},[el("button",{type:"button","aria-label":"Post options","aria-haspopup":"menu","aria-expanded":openMenu===p.id?"true":"false",onclick:function(){openMenu=openMenu===p.id?null:p.id;draw()}},["\u22ef"])].concat(openMenu===p.id?[pop]:[]))}
+var art=el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.scheduled_at&&new Date(p.scheduled_at).getTime()<=Date.now()?p.scheduled_at:p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
 p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nm(p.shared_from_user)])]):"",
 p.location_name?el("p",{class:"empty",style:"margin:0 0 6px"},["\ud83d\udccd ",el("a",{href:"https://www.openstreetmap.org/search?query="+encodeURIComponent(p.location_name),target:"_blank",rel:"noopener noreferrer"},[p.location_name])]):"",
@@ -889,7 +901,7 @@ el("div",{class:"acts"},acts),
 openLikes===p.id&&likes.length?likersPop(likes):"",
 shareFor===p.id?shareDlg(p):"",
 el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("a",{class:"nm",href:"#profile/"+c.user_id},[nm(c.user_id)]),c.body])})),
-p.comments_off?el("p",{class:"empty",style:"margin-top:8px"},["Comments are turned off for this post."]):el("div",{style:"margin-top:8px"},[cin])])}
+p.comments_off?el("p",{class:"empty",style:"margin-top:8px"},["Comments are turned off for this post."]):el("div",{style:"margin-top:8px"},[cin])]);if(menuEl)art.firstChild.appendChild(menuEl);return art}
 
 function side(){
 var incoming=D.fs.filter(function(f){return f.addressee===me.id&&f.status==="pending"&&D.names[f.requester]});
@@ -911,6 +923,8 @@ box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
 if(document.addEventListener&&document.querySelectorAll)document.addEventListener("click",function(e){
 var o=document.querySelectorAll(".react.open");for(var i=0;i<o.length;i++)if(!o[i].contains(e.target))o[i].classList.remove("open")});
+document.addEventListener("click",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu"))){openMenu=null;draw()}});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&openMenu){openMenu=null;draw()}});
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
