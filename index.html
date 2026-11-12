@@ -65,6 +65,16 @@ img.av{object-fit:cover}
 .mb.me{align-self:flex-end;background:var(--pri);color:var(--onpri)}
 .mb small{display:block;opacity:.7;font-size:.72rem;margin-top:2px}
 .mb.wait{opacity:.6}
+.mimg{max-width:240px;max-height:300px;border-radius:10px;display:block}
+.mvid{max-width:260px;max-height:300px;border-radius:10px;display:block;background:#000}
+.maud{width:230px;max-width:100%;display:block}
+.mfile{color:inherit;text-decoration:underline}
+.mtools{display:flex;gap:6px}
+.mtools .btn{padding:8px 11px}
+.mrec{display:none;align-items:center;gap:10px;margin-top:8px;color:var(--like);font-weight:600}
+.mrec .mt{min-width:2.8em}
+.mcomp{flex-wrap:wrap}
+.mcomp input{min-width:140px}
 .mcomp{display:flex;gap:8px;align-items:flex-start;margin-top:8px}
 .mcomp input{margin:0;flex:1}
 .mbadge{margin-left:auto;background:var(--pri);color:var(--onpri);border-radius:999px;padding:0 8px;font-size:.8rem;font-weight:700}
@@ -323,7 +333,7 @@ el("p",{class:"empty"},["Permanently deletes your account, posts, photos, commen
 el("button",{class:"btn",onclick:function(){
 if(conf.value.trim()!=="DELETE"){say("Type DELETE in the box to confirm.");draw();return}
 act(async function(){
-var buckets=["post-images","avatars","covers"];
+var buckets=["post-images","avatars","covers","message-media"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
@@ -453,7 +463,8 @@ async function pollUnread(){if(!me)return;try{var r=await sb.from("messages").se
 if(!r.error){mUnread=r.count||0;paintBell()}}catch(e){}}
 async function loadMsgs(){
 if(M.busy||!me)return;M.busy=true;
-try{var r=await sb.from("messages").select("id,sender,recipient,body,created_at,read").order("created_at",{ascending:false}).limit(1000);
+try{var sets=["id,sender,recipient,body,created_at,read,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at,read"],r;
+for(var si=0;si<sets.length;si++){r=await sb.from("messages").select(sets[si]).order("created_at",{ascending:false}).limit(1000);if(!r.error)break}
 if(r.error){M.err=r.error.message||"error";M.list=[]}else{M.err=null;M.list=r.data.reverse()}M.loaded=true}
 catch(e){M.err=e.message||"error";M.loaded=true}
 M.busy=false;
@@ -464,7 +475,66 @@ try{var r=await sb.from("messages").update({read:true}).eq("sender",id).eq("reci
 if(!r.error){M.list.forEach(function(m){if(m.sender===id&&m.recipient===me.id)m.read=true});
 mUnread=M.list.filter(function(m){return m.recipient===me.id&&!m.read}).length;paintBell()}}catch(e){}
 M.marking=false}
-function msgSnippet(m){return(m.sender===me.id?"You: ":"")+m.body.replace(/\s+/g," ").slice(0,60)}
+function msgSnippet(m){var t=m.media_type?({image:"\ud83d\udcf7 Photo",video:"\ud83c\udfa5 Video",audio:"\ud83c\udfa4 Voice note"}[m.media_type]||"\ud83d\udcce "+(m.media_name||"File")):m.body.replace(/\s+/g," ").slice(0,60);return(m.sender===me.id?"You: ":"")+t}
+var murl={};
+function murlGet(p){var c=murl[p];return(c&&c.url&&Date.now()-c.t<45*60*1000)?c.url:null}
+async function mediaUrls(paths){
+var need=paths.filter(function(p){return !murlGet(p)&&!(murl[p]&&murl[p].fail)});
+if(!need.length)return false;
+var r=await sb.storage.from("message-media").createSignedUrls(need,3600);
+need.forEach(function(p){murl[p]={fail:true,t:Date.now()}});
+if(!r.error)r.data.forEach(function(x){if(x.signedUrl)murl[x.path]={url:x.signedUrl,t:Date.now()}});
+return true}
+function fmtSize(n){return n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round((n||0)/1024))+" KB"}
+function mediaEl(m){
+if(!m.media_type)return "";
+var url=m.localUrl||(m.media_path?murlGet(m.media_path):null);
+if(!url)return el("small",{},[murl[m.media_path]&&murl[m.media_path].fail?"Attachment unavailable":"Loading attachment\u2026"]);
+if(m.media_type==="image")return el("a",{href:url,target:"_blank",rel:"noopener noreferrer"},[el("img",{class:"mimg",src:url,alt:m.media_name||"Photo",loading:"lazy"})]);
+if(m.media_type==="video")return el("video",{class:"mvid",controls:"controls",preload:"metadata",playsinline:"playsinline",src:url},[]);
+if(m.media_type==="audio")return el("audio",{class:"maud",controls:"controls",preload:"metadata",src:url},[]);
+return el("a",{class:"mfile",href:url,target:"_blank",rel:"noopener noreferrer"},["\ud83d\udcce "+(m.media_name||"File")+(m.media_size?" ("+fmtSize(m.media_size)+")":"")])}
+var rec=null;
+function fmtT(s){return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2)}
+function stopRec(send){
+if(!rec)return;var r=rec;rec=null;clearInterval(r.tm);
+var b=document.getElementById("mrec");if(b)b.style.display="none";
+r.cancelled=!send;try{r.mr.stop()}catch(e){}r.stream.getTracks().forEach(function(t){t.stop()})}
+async function startRec(id){
+if(rec)return;
+var ee=document.getElementById("merr");
+if(!navigator.mediaDevices||!window.MediaRecorder){if(ee)ee.textContent="Voice notes aren\u2019t supported in this browser.";return}
+var stream;
+try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){if(ee)ee.textContent="Microphone access was blocked. Allow it in your browser settings.";return}
+var mt=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].filter(function(t){return MediaRecorder.isTypeSupported(t)})[0]||"";
+var mr=new MediaRecorder(stream,mt?{mimeType:mt}:undefined),chunks=[];
+var r={mr:mr,stream:stream,start:Date.now(),cancelled:false,tm:null};
+mr.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
+mr.onstop=function(){if(r.cancelled)return;var type=(mr.mimeType||mt||"audio/webm").split(";")[0];var blob=new Blob(chunks,{type:type});if(blob.size<500)return;sendMedia(id,blob,"audio","Voice note",type)};
+rec=r;mr.start();
+var bar=document.getElementById("mrec");if(bar){bar.style.display="flex";var tt=bar.querySelector(".mt");tt.textContent="0:00";
+r.tm=setInterval(function(){var sec=Math.floor((Date.now()-r.start)/1000);tt.textContent=fmtT(sec);if(sec>=180)stopRec(true)},500)}}
+var BAD_EXT=/\.(exe|bat|cmd|com|msi|scr|vbs|js|jar|apk|sh|ps1|dll)$/i;
+async function sendMedia(id,file,kind,name,ctype){
+var ee=document.getElementById("merr");if(ee)ee.textContent="";
+if(file.size>25*1024*1024){if(ee)ee.textContent="That file is too large (max 25 MB).";return}
+var ext=(name.match(/\.([A-Za-z0-9]{1,8})$/)||[])[1]||"bin";
+if(kind==="audio")ext=ctype.indexOf("mp4")>-1?"m4a":ctype.indexOf("ogg")>-1?"ogg":"webm";
+if(kind==="image")ext="jpg";
+var path=me.id+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext.toLowerCase();
+var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:"",media_type:kind,media_name:name,localUrl:URL.createObjectURL(file),created_at:new Date().toISOString(),read:false};
+M.pending.push(tmp);paintMsgs();
+try{
+var up=await sb.storage.from("message-media").upload(path,file,{contentType:ctype||"application/octet-stream"});
+if(up.error)throw up.error;
+var r=await sb.from("messages").insert({sender:me.id,recipient:id,body:"",media_path:path,media_type:kind,media_name:name.slice(0,200),media_size:file.size});
+if(r.error){await sb.storage.from("message-media").remove([path]);throw r.error}
+}catch(e){
+M.pending=M.pending.filter(function(x){return x!==tmp});
+var m2=(e&&e.message)||"";var e2=document.getElementById("merr");
+if(e2)e2.textContent=/bucket not found|media_|schema cache|column/i.test(m2)?"Attachments need a one-time database setup. Run the latest SQL from the chat.":/row-level|policy/i.test(m2)?"You can only message your friends.":/size|large/i.test(m2)?"That file is too large (max 25 MB).":(m2||"Couldn\u2019t send. Try again.");
+paintMsgs();return}
+M.busy=false;await loadMsgs();M.pending=M.pending.filter(function(x){return x!==tmp});paintMsgs()}
 function paintMsgs(){
 var box=document.getElementById("mbody");if(!box||!me)return;
 var r=route();if(r.name!=="messages")return;
@@ -492,8 +562,10 @@ if(box.getAttribute("data-sig")!==sig2){
 var prev=box.firstChild,atBottom=!prev||!prev.scrollHeight||(prev.scrollHeight-prev.scrollTop-prev.clientHeight<60);
 box.setAttribute("data-sig",sig2);box.innerHTML="";
 var list=el("div",{class:"mlist"},th.length?th.map(function(m){var mine=m.sender===me.id;
-return el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[m.body,el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)])])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
-box.appendChild(list);if(atBottom)list.scrollTop=list.scrollHeight}
+return el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[mediaEl(m),m.body?m.body:"",el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)])])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
+box.appendChild(list);if(atBottom)list.scrollTop=list.scrollHeight;
+var need=th.filter(function(m){return m.media_path&&!murlGet(m.media_path)&&!(murl[m.media_path]&&murl[m.media_path].fail)}).map(function(m){return m.media_path});
+if(need.length)mediaUrls(need).then(function(ch){var b=document.getElementById("mbody");if(ch&&b){b.removeAttribute("data-sig");paintMsgs()}})}
 if(th.some(function(m){return m.sender===id&&!m.read}))markRead(id)}
 function sendMsg(id,input){
 var v=input.value.trim();if(!v)return;
@@ -508,6 +580,7 @@ if(e2)e2.textContent=/row-level|policy/i.test(r.error.message||"")?"You can only
 input.value=v;paintMsgs();return}
 M.busy=false;await loadMsgs();paintMsgs()})}
 function messagesPage(id){
+stopRec(false);
 if(!M.busy)loadMsgs().then(paintMsgs);
 var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
 setTimeout(paintMsgs,0);
@@ -517,7 +590,24 @@ var kids=[head,box];
 if(isFriend(id)){
 var inp=el("input",{placeholder:"Write a message","aria-label":"Write a message",maxlength:"2000",autocomplete:"off"});
 inp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(id,inp)}});
-kids.push(el("div",{class:"mcomp"},[inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
+var ee0=function(t){var e=document.getElementById("merr");if(e)e.textContent=t};
+var pf=el("input",{type:"file",accept:"image/*,video/*",style:"display:none","aria-label":"Choose a photo or video",onchange:async function(e){
+var f=e.target.files[0];e.target.value="";if(!f)return;
+if(f.type.indexOf("image/")===0){var b;try{b=await shrink(f,1600)}catch(x){ee0("Couldn\u2019t read that image.");return}sendMedia(id,b,"image",f.name,"image/jpeg")}
+else if(f.type.indexOf("video/")===0)sendMedia(id,f,"video",f.name,f.type);
+else ee0("Choose a photo or a video.")}});
+var af=el("input",{type:"file",style:"display:none","aria-label":"Choose a file to attach",onchange:function(e){
+var f=e.target.files[0];e.target.value="";if(!f)return;
+if(BAD_EXT.test(f.name)){ee0("That file type can\u2019t be sent.");return}
+sendMedia(id,f,"file",f.name,f.type)}});
+var tools=el("div",{class:"mtools"},[
+el("button",{class:"btn alt",type:"button",title:"Attach a file","aria-label":"Attach a file",onclick:function(){af.click()}},["\ud83d\udcce"]),
+el("button",{class:"btn alt",type:"button",title:"Send a photo or video","aria-label":"Send a photo or video",onclick:function(){pf.click()}},["\ud83d\uddbc\ufe0f"]),
+el("button",{class:"btn alt",type:"button",title:"Record a voice note","aria-label":"Record a voice note",onclick:function(){startRec(id)}},["\ud83c\udfa4"])]);
+var bar=el("div",{class:"mrec",id:"mrec"},[el("span",{},["\u25cf Recording"]),el("span",{class:"mt"},["0:00"]),
+el("button",{class:"btn alt",type:"button",onclick:function(){stopRec(false)}},["Cancel"]),
+el("button",{class:"btn",type:"button",onclick:function(){stopRec(true)}},["Send"])]);
+kids.push(bar,el("div",{class:"mcomp"},[pf,af,tools,inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
 setTimeout(function(){inp.focus()},50)}
 else kids.push(el("p",{class:"empty"},["You can only send messages to friends."]));
 return el("div",{class:"card"},kids)}
