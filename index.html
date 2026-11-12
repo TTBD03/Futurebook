@@ -355,12 +355,21 @@ var REL=["Single","In a relationship","Engaged","Married","It's complicated","Pr
 function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:""}
 function isFriend(id){return D.fs.some(function(f){return f.status==="accepted"&&((f.requester===me.id&&f.addressee===id)||(f.requester===id&&f.addressee===me.id))})}
 function verMark(){return el("span",{class:"ver",role:"img",title:"Verified profile","aria-label":"Verified profile"},["✓"])}
+var PV=[["public","\ud83c\udf10 Public"],["friends","\ud83d\udc65 Friends"],["me","\ud83d\udd12 Only me"]];
+function pvDef(k){return(k==="contact_email"||k==="phone")?"friends":"public"}
+function pvLevel(x,k){return(x&&x.pv&&x.pv[k])||pvDef(k)}
+function pvLabel(l){for(var i=0;i<PV.length;i++)if(PV[i][0]===l)return PV[i][1];return PV[0][1]}
 async function loadExtras(id){
 X[id]={loading:true};
 try{
+var r=await sb.rpc("get_profile_extras",{target:id});
+if(!r.error&&r.data){var o=r.data;
+X[id]={d:{education:o.education,workplace:o.workplace,current_city:o.current_city,hometown:o.hometown,relationship_status:o.relationship_status,website:o.website},
+c:{contact_email:o.contact_email,phone:o.phone},pv:o.privacy||{},priv:true}}
+else{
 var d=await sb.from("profile_details").select("education,workplace,current_city,hometown,relationship_status,website").eq("user_id",id).maybeSingle();
 var c=await sb.from("profile_contact").select("contact_email,phone").eq("user_id",id).maybeSingle();
-X[id]={d:d.error?null:d.data,c:c.error?null:c.data,fail:!!d.error}
+X[id]={d:d.error?null:d.data,c:c.error?null:c.data,fail:!!d.error,priv:false}}
 }catch(e){X[id]={d:null,c:null,fail:true}}
 draw()}
 function coverInput(){return el("input",{type:"file",id:"coverfile",accept:"image/jpeg,image/png,image/webp","aria-label":"Choose a cover photo",style:"display:none",onchange:function(e){var f=e.target.files[0];if(!f)return;
@@ -376,34 +385,39 @@ var x=X[id];
 if(!x||x.loading)return el("div",{class:"card about"},[el("h3",{},["About"]),el("p",{class:"empty"},["Loading…"])]);
 if(x.fail)return el("div",{class:"card about"},[el("h3",{},["About"]),el("p",{class:"empty"},["Details aren’t available right now."])]);
 var d=x.d||{},c=x.c||{},rows=[];
-function add(k,v){if(v)rows.push([k,typeof v==="string"?document.createTextNode(v):v])}
-add("Education",d.education);add("Workplace",d.workplace);add("Lives in",d.current_city);add("From",d.hometown);add("Relationship",d.relationship_status);
+function add(k,v,key){if(!v)return;var node=typeof v==="string"?document.createTextNode(v):v;
+if(mine&&x.priv&&key)node=el("span",{},[node,el("small",{class:"when",style:"margin-left:8px"},[pvLabel(pvLevel(x,key))])]);
+rows.push([k,node])}
+add("Education",d.education,"education");add("Workplace",d.workplace,"workplace");add("Lives in",d.current_city,"current_city");add("From",d.hometown,"hometown");add("Relationship",d.relationship_status,"relationship_status");
 var site=safeUrl(d.website);
-if(site)add("Website",el("a",{href:site,target:"_blank",rel:"noopener noreferrer nofollow"},[site.replace(/^https?:\/\//i,"")]));
-if(mine||isFriend(id)){add("Email",c.contact_email);add("Phone",c.phone)}
+if(site)add("Website",el("a",{href:site,target:"_blank",rel:"noopener noreferrer nofollow"},[site.replace(/^https?:\/\//i,"")]),"website");
+if(x.priv||mine||isFriend(id)){add("Email",c.contact_email,"contact_email");add("Phone",c.phone,"phone")}
 var dl=el("dl",{},[]);
 rows.forEach(function(r){dl.appendChild(el("dt",{},[r[0]]));var dd=el("dd",{},[]);dd.appendChild(r[1]);dl.appendChild(dd)});
 return el("div",{class:"card about"},[el("h3",{},["About"]),
 rows.length?dl:el("p",{class:"empty"},[mine?"Nothing here yet. Use Edit profile to add your details.":"Nothing to show yet."]),
-mine?el("p",{class:"hint"},["Your email and phone are visible to you and your friends only. Everything else here is visible to signed-in members."]):""])}
+mine?el("p",{class:"hint"},[x.priv?"Use Edit profile to choose who can see each detail: Public (any signed-in member), Friends, or Only me.":"Your email and phone are visible to you and your friends only. Everything else here is visible to signed-in members."]):""])}
 function editForm(id){
 var u=D.info[id]||{},x=X[id]||{},d=x.d||{},c=x.c||{};
 var v=draft||{username:u.username,bio:u.bio,education:d.education||"",workplace:d.workplace||"",city:d.current_city||"",home:d.hometown||"",rel:d.relationship_status||"",site:d.website||"",email:c.contact_email||"",phone:c.phone||""};
-var F={};
-function line(label,key,max,ph,type){F[key]=el("input",{type:type||"text",value:v[key]||"",maxlength:String(max),placeholder:ph||""});return el("label",{class:"f"},[el("span",{},[label]),F[key]])}
+var F={},P={};
+function pvSel(pk,label){var cur=(draft&&draft.pv&&draft.pv[pk])||pvLevel(x,pk);
+var sel=el("select",{"aria-label":"Who can see "+label,style:"width:auto;margin:-4px 0 10px"},PV.map(function(o){return el("option",{value:o[0]},[o[1]])}));sel.value=cur;P[pk]=sel;return sel}
+function line(label,key,max,ph,type,pk){F[key]=el("input",{type:type||"text",value:v[key]||"",maxlength:String(max),placeholder:ph||""});
+var kids=[el("span",{},[label]),F[key]];if(x.priv&&pk)kids.push(pvSel(pk,label));return el("label",{class:"f"},kids)}
 var bio=el("textarea",{rows:"3",maxlength:"300",placeholder:"A few words about you"},[v.bio||""]);
 var rel=el("select",{},[el("option",{value:""},["Not specified"])].concat(REL.map(function(r){return el("option",{value:r},[r])})));rel.value=v.rel||"";
-function collect(){return {username:F.username.value.trim().toLowerCase().replace(/^@/,""),bio:bio.value.trim(),education:F.education.value.trim(),workplace:F.workplace.value.trim(),city:F.city.value.trim(),home:F.home.value.trim(),rel:rel.value,site:F.site.value.trim(),email:F.email.value.trim(),phone:F.phone.value.trim()}}
+function collect(){var pv={};for(var k in P)pv[k]=P[k].value;return {pv:x.priv?pv:null,username:F.username.value.trim().toLowerCase().replace(/^@/,""),bio:bio.value.trim(),education:F.education.value.trim(),workplace:F.workplace.value.trim(),city:F.city.value.trim(),home:F.home.value.trim(),rel:rel.value,site:F.site.value.trim(),email:F.email.value.trim(),phone:F.phone.value.trim()}}
 var form=[line("Username","username",20,"letters, numbers, underscores"),
 el("label",{class:"f"},[el("span",{},["Bio"]),bio]),
-line("Education","education",120,"School or university"),
-line("Workplace","workplace",120,"Where you work"),
-line("Current city","city",80),
-line("Hometown","home",80),
-el("label",{class:"f"},[el("span",{},["Relationship status"]),rel]),
-line("Website","site",200,"https://example.com"),
-line("Contact email (friends only)","email",120,"","email"),
-line("Phone (friends only)","phone",30,"","tel")];
+line("Education","education",120,"School or university",null,"education"),
+line("Workplace","workplace",120,"Where you work",null,"workplace"),
+line("Current city","city",80,"",null,"current_city"),
+line("Hometown","home",80,"",null,"hometown"),
+el("label",{class:"f"},[el("span",{},["Relationship status"]),rel].concat(x.priv?[pvSel("relationship_status","Relationship status")]:[])),
+line("Website","site",200,"https://example.com",null,"website"),
+line("Contact email","email",120,"","email","contact_email"),
+line("Phone","phone",30,"","tel","phone")];
 var save=el("button",{class:"btn",onclick:function(){act(async function(){
 var f=collect();draft=f;
 if(f.username&&!/^[a-z0-9_]{3,20}$/.test(f.username))throw new Error("Username must be 3–20 letters, numbers or underscores.");
@@ -414,7 +428,9 @@ if(f.phone&&!/^[0-9+()\-\s.]{5,30}$/.test(f.phone))throw new Error("That phone n
 var now=new Date().toISOString();
 var r1=await sb.from("profiles").update({username:f.username||null,bio:f.bio||null}).eq("id",me.id);
 if(r1.error)throw r1.error.code==="23505"?new Error("That username is taken."):r1.error;
-var r2=await sb.from("profile_details").upsert({user_id:me.id,education:f.education||null,workplace:f.workplace||null,current_city:f.city||null,hometown:f.home||null,relationship_status:f.rel||null,website:site||null,updated_at:now});
+var row2={user_id:me.id,education:f.education||null,workplace:f.workplace||null,current_city:f.city||null,hometown:f.home||null,relationship_status:f.rel||null,website:site||null,updated_at:now};
+if(f.pv)row2.privacy=f.pv;
+var r2=await sb.from("profile_details").upsert(row2);
 if(r2.error)throw r2.error;
 var r3=await sb.from("profile_contact").upsert({user_id:me.id,contact_email:f.email||null,phone:f.phone||null,updated_at:now});
 if(r3.error)throw r3.error;
