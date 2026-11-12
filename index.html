@@ -42,6 +42,16 @@ header.top{position:sticky;top:0;background:var(--card);border-bottom:1px solid 
 .side h3{font-size:1.05rem;margin-bottom:10px}
 .side .row{margin-bottom:10px}
 .empty{color:var(--mute);margin:0 0 10px}
+a.logo{text-decoration:none}
+.nav{color:var(--mute);text-decoration:none;font-weight:600;padding:4px 8px;border-radius:8px}
+.nav.cur{color:var(--pri);background:var(--soft)}
+a.nm{color:inherit;font-weight:700;text-decoration:none;margin-right:6px}
+a.nm:hover{text-decoration:underline}
+a.note{color:inherit;text-decoration:none}
+.card h2{margin-bottom:10px}
+.profile{display:flex;gap:18px;align-items:center}
+.av.big{width:96px;height:96px;font-size:2.2rem}
+.badge{background:var(--soft);padding:4px 12px;border-radius:999px;font-weight:600}
 h3.sub{font-size:1rem;margin:18px 0 8px}
 .note{padding:6px 8px;border-radius:10px;margin-bottom:6px}
 .note.unread{background:var(--soft)}
@@ -158,19 +168,33 @@ var up=await sb.storage.from("avatars").upload(path,b,{contentType:"image/jpeg",
 var url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl+"?v="+Date.now();
 var r=await sb.from("profiles").update({avatar_url:url}).eq("id",me.id);if(r.error)throw r.error;say("Profile photo updated.",true)})}})}
 function unread(){return D.notes.filter(function(n){return !n.read}).length}
-function toggleNotes(){
-if(!showNotes){showNotes=true;draw();return}
-showNotes=false;
-if(unread()>0)act(async function(){var r=await sb.from("notifications").update({read:true}).eq("read",false);if(r.error)throw r.error});else draw()}
-function notesPanel(){
-if(!showNotes)return "";
+function route(){
+var h=location.hash.replace(/^#\/?/,"").split("/"),n=h[0];
+if(n==="notifications"||n==="settings")return {name:n};
+if(n==="profile")return {name:"profile",id:h[1]||me.id};
+return {name:"home"}}
+function nav(href,label,id,cur){return el("a",{href:href,class:"nav"+(cur?" cur":""),id:id||null,"aria-current":cur?"page":null},[label])}
+function header(){
+var n=unread(),r=route();
+return el("header",{class:"top"},[
+el("a",{href:"#home",class:"logo"},["Futurebook"]),
+el("nav",{class:"row","aria-label":"Main"},[
+nav("#home","Home",null,r.name==="home"),
+nav("#notifications","Notifications"+(n?" ("+n+")":""),"bell",r.name==="notifications"),
+nav("#profile","Profile",null,r.name==="profile"&&r.id===me.id),
+nav("#settings","Settings",null,r.name==="settings"),
+el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");location.hash="";await refresh()}},["Log out"])])])}
+function notesPage(){
 var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"liked your post.",comment:"commented on your post."};
+var fresh=D.notes.filter(function(n){return !n.read}).map(function(n){return n.id});
 var items=D.notes.map(function(n){
-return el("div",{class:"row note"+(n.read?"":" unread")},[av(n.actor),
+var href=(n.type==="friend_request"||n.type==="friend_accept")?"#profile/"+n.actor:"#home";
+return el("a",{href:href,class:"row note"+(fresh.indexOf(n.id)>-1?" unread":"")},[av(n.actor),
 el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])});
-return el("div",{class:"card"},[el("h3",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
-function settingsPanel(){
-if(!showSettings)return "";
+if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).then(function(r){
+if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
+return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
+function settingsPage(){
 var np=el("input",{type:"password",placeholder:"New password (at least 6 characters)","aria-label":"New password",autocomplete:"new-password"});
 var conf=el("input",{placeholder:"Type DELETE to confirm","aria-label":"Type DELETE to confirm",autocomplete:"off"});
 return el("div",{class:"card"},[
@@ -184,7 +208,7 @@ el("h3",{class:"sub"},["Deactivate account"]),
 el("p",{class:"empty"},["Hides your profile and posts from everyone. Log in again any time to bring it back."]),
 el("button",{class:"btn alt",onclick:function(){if(!confirm("Deactivate your account?"))return;
 act(async function(){var r=await sb.from("profiles").update({deactivated:true}).eq("id",me.id);if(r.error)throw r.error;
-await sb.auth.signOut({scope:"local"});D=null;showSettings=false;say("Your account is deactivated. Log in any time to reactivate it.",true)})}},["Deactivate my account"]),
+await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account is deactivated. Log in any time to reactivate it.",true)})}},["Deactivate my account"]),
 el("h3",{class:"sub"},["Delete account"]),
 el("p",{class:"empty"},["Permanently deletes your account, posts, photos, comments and friendships. This can’t be undone."]),conf,
 el("button",{class:"btn",onclick:function(){
@@ -194,8 +218,8 @@ var buckets=["post-images","avatars"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
-await sb.auth.signOut({scope:"local"});D=null;showSettings=false;say("Your account has been deleted.",true)})}},["Delete my account"])])}
-function feed(){
+await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])])}
+function homePage(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
 var pic=el("input",{type:"file",accept:"image/jpeg,image/png,image/webp","aria-label":"Add a photo"});
 var box=el("div",{class:"card"},[ta,pic,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f)return;
@@ -203,13 +227,35 @@ act(async function(){var path=null;
 if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error}
 var r=await sb.from("posts").insert({user_id:me.id,body:v||" ",image_path:path});if(r.error)throw r.error;say("")})}},["Post"])]);
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
+return el("div",{},[box,list])}
+
+function friendActions(id){
+var f=D.fs.filter(function(x){return (x.requester===me.id&&x.addressee===id)||(x.requester===id&&x.addressee===me.id)})[0];
+function del(label,ask){return el("button",{class:"btn alt",onclick:function(){if(ask&&!confirm(ask))return;act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},[label])}
+if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"])];
+if(!f)return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])];
+if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
+if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
+return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept request"]),del("Decline",null)]}
+
+function profilePage(id){
+if(!D.names[id])return el("div",{class:"card"},[el("p",{class:"empty"},["This profile isn’t available."])]);
+var mine=id===me.id,big=av(id);big.classList.add("big");
+var acts=mine?[avInput(),el("button",{class:"btn alt",onclick:function(){document.getElementById("avfile").click()}},["Change photo"])]:friendActions(id);
+var posts=D.posts.filter(function(p){return p.user_id===id});
 return el("div",{},[
-el("header",{class:"top"},[el("div",{class:"logo"},["Futurebook"]),el("div",{class:"row"},[av(me.id),el("b",{},[nm(me.id)]),avInput(),el("button",{class:"link",onclick:function(){document.getElementById("avfile").click()}},["Change photo"]),
-el("button",{class:"link",id:"bell",onclick:toggleNotes},["Notifications"+(unread()?" ("+unread()+")":"")]),
-el("button",{class:"link",onclick:function(){refresh()}},["Refresh"]),
-el("button",{class:"link",onclick:function(){showSettings=!showSettings;draw()}},["Settings"]),
-el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");await refresh()}},["Log out"])])]),
-el("div",{class:"wrap"},[el("main",{},[el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text]),notesPanel(),settingsPanel(),box,list]),side()]),
+el("div",{class:"card profile"},[big,el("div",{},[el("h2",{},[nm(id)]),el("div",{class:"row"},acts)])]),
+el("h3",{class:"sub"},["Posts"]),
+el("div",{},posts.length?posts.map(post):[el("p",{class:"empty"},[mine?"You haven’t posted yet.":"No posts to show."])])])}
+
+function feed(){
+var r=route(),body;
+if(r.name==="notifications")body=notesPage();
+else if(r.name==="settings")body=settingsPage();
+else if(r.name==="profile")body=profilePage(r.id);
+else body=homePage();
+return el("div",{},[header(),
+el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"])])])}
 
 function post(p){
@@ -231,11 +277,11 @@ var d=await sb.from("friendships").delete().or("and(requester.eq."+me.id+",addre
 }
 if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delete this post?"))act(async function(){var r=await sb.from("posts").delete().eq("id",p.id);if(r.error)throw r.error;if(p.image_path)await sb.storage.from("post-images").remove([p.image_path])})}},["Delete"]));
 return el("article",{class:"card post"},[
-el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("b",{},[nm(p.user_id)]),el("small",{},[ago(p.created_at)])])]),
+el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.created_at)])])]),
 p.body.trim()?el("p",{},[p.body]):"",
 p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:"Photo shared by "+nm(p.user_id),loading:"lazy"}):"",
 el("div",{class:"acts"},acts),
-el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("b",{},[nm(c.user_id)]),c.body])})),
+el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("a",{class:"nm",href:"#profile/"+c.user_id},[nm(c.user_id)]),c.body])})),
 el("div",{style:"margin-top:8px"},[cin])])}
 
 function side(){
@@ -249,7 +295,7 @@ var others=Object.keys(D.names).filter(function(id){return id!==me.id&&!linked[i
 return el("div",{class:"row"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])])});
 var sent=D.fs.filter(function(f){return f.requester===me.id&&f.status==="pending"&&D.names[f.addressee]}).map(function(f){
 return el("div",{class:"row"},[av(f.addressee),el("span",{},[nm(f.addressee)+" (request sent)"])])});
-var fr=friends.map(function(id){return el("div",{class:"row"},[av(id),el("span",{},[nm(id)])])});
+var fr=friends.map(function(id){return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])])});
 function box(title,items,emptyText){return el("div",{class:"card"},[el("h3",{},[title])].concat(items.length?items:[el("p",{class:"empty"},[emptyText])]))}
 return el("aside",{class:"side"},[
 box("Friend requests",reqs,"No new requests."),
@@ -257,6 +303,7 @@ box("People you may know",others.concat(sent),"No one else has joined yet. Invit
 box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
+window.addEventListener("hashchange",function(){say("");draw();window.scrollTo(0,0)});
 refresh();
 setInterval(async function(){
 if(!me)return;
