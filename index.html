@@ -60,6 +60,14 @@ img.av{object-fit:cover}
 .ptabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:4px 0 12px}
 .ptabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font-weight:600;color:var(--mute)}
 .ptabs button[aria-selected=true]{color:var(--pri);border-bottom-color:var(--pri)}
+.mlist{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 2px 8px}
+.mb{max-width:80%;padding:8px 12px;border-radius:14px;background:var(--soft);overflow-wrap:anywhere;white-space:pre-wrap;align-self:flex-start}
+.mb.me{align-self:flex-end;background:var(--pri);color:var(--onpri)}
+.mb small{display:block;opacity:.7;font-size:.72rem;margin-top:2px}
+.mb.wait{opacity:.6}
+.mcomp{display:flex;gap:8px;align-items:flex-start;margin-top:8px}
+.mcomp input{margin:0;flex:1}
+.mbadge{margin-left:auto;background:var(--pri);color:var(--onpri);border-radius:999px;padding:0 8px;font-size:.8rem;font-weight:700}
 .pcap{margin:6px 0 6px;color:var(--mute);font-size:.95rem;overflow-wrap:anywhere}
 .pcap button{background:none;border:0;color:var(--pri);padding:0 0 0 8px;font-size:.85rem}
 .pimg{width:100%;max-height:560px;object-fit:cover;border-radius:12px;margin:6px 0 10px;display:block}
@@ -193,7 +201,7 @@ async function refresh(){
 var s=(await sb.auth.getSession()).data.session;
 me=s?s.user:null;
 if(me){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}}
-draw()}
+draw();if(me)pollUnread()}
 
 function draw(){var y=window.scrollY;root.innerHTML="";root.appendChild(recovering?resetForm():(me&&D?feed():auth()));if(y)window.scrollTo(0,y)}
 
@@ -264,6 +272,7 @@ var h=location.hash.replace(/^#\/?/,"").split("/"),n=h[0];
 if(n==="notifications"||n==="settings")return {name:n};
 if(n==="profile")return {name:"profile",id:h[1]||me.id};
 if(n==="post"&&h[1])return {name:"post",id:h[1]};
+if(n==="messages")return {name:"messages",id:h[1]||null};
 return {name:"home"}}
 function nav(href,label,id,cur){return el("a",{href:href,class:"nav"+(cur?" cur":""),id:id||null,"aria-current":cur?"page":null},[label])}
 function header(){
@@ -272,6 +281,7 @@ return el("header",{class:"top"},[
 el("a",{href:"#home",class:"logo",onclick:function(e){e.preventDefault();history.replaceState(null,"",location.pathname+location.search+"#home");location.reload()}},["Futurebook"]),
 el("nav",{class:"row","aria-label":"Main"},[
 nav("#home","Home",null,r.name==="home"),
+nav("#messages","Messages"+(mUnread?" ("+mUnread+")":""),"msgbell",r.name==="messages"),
 nav("#notifications","Notifications"+(n?" ("+n+")":""),"bell",r.name==="notifications"),
 nav("#profile","Profile",null,r.name==="profile"&&r.id===me.id),
 nav("#settings","Settings",null,r.name==="settings"),
@@ -346,7 +356,7 @@ var f=D.fs.filter(function(x){return (x.requester===me.id&&x.addressee===id)||(x
 function del(label,ask){return el("button",{class:"btn alt",onclick:function(){if(ask&&!confirm(ask))return;act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},[label])}
 if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])];
 if(!f)return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])];
-if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
+if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),el("a",{href:"#messages/"+id,class:"btn",style:"text-decoration:none;display:inline-block"},["Message"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
 return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept request"]),del("Decline",null)]}
 
@@ -437,6 +447,80 @@ if(r3.error)throw r3.error;
 draft=null;editing=false;X={};say("Profile saved.",true)})}},["Save"]);
 var cancel=el("button",{class:"btn alt",onclick:function(){editing=false;draft=null;draw()}},["Cancel"]);
 return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("div",{class:"row"},[save,cancel])]))}
+var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnread=0;
+function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"")}
+async function pollUnread(){if(!me)return;try{var r=await sb.from("messages").select("id",{count:"exact",head:true}).eq("recipient",me.id).eq("read",false);
+if(!r.error){mUnread=r.count||0;paintBell()}}catch(e){}}
+async function loadMsgs(){
+if(M.busy||!me)return;M.busy=true;
+try{var r=await sb.from("messages").select("id,sender,recipient,body,created_at,read").order("created_at",{ascending:false}).limit(1000);
+if(r.error){M.err=r.error.message||"error";M.list=[]}else{M.err=null;M.list=r.data.reverse()}M.loaded=true}
+catch(e){M.err=e.message||"error";M.loaded=true}
+M.busy=false;
+if(!M.err){mUnread=M.list.filter(function(m){return m.recipient===me.id&&!m.read}).length;paintBell()}}
+async function markRead(id){
+if(M.marking)return;M.marking=true;
+try{var r=await sb.from("messages").update({read:true}).eq("sender",id).eq("recipient",me.id).eq("read",false);
+if(!r.error){M.list.forEach(function(m){if(m.sender===id&&m.recipient===me.id)m.read=true});
+mUnread=M.list.filter(function(m){return m.recipient===me.id&&!m.read}).length;paintBell()}}catch(e){}
+M.marking=false}
+function msgSnippet(m){return(m.sender===me.id?"You: ":"")+m.body.replace(/\s+/g," ").slice(0,60)}
+function paintMsgs(){
+var box=document.getElementById("mbody");if(!box||!me)return;
+var r=route();if(r.name!=="messages")return;
+if(M.err){box.innerHTML="";box.removeAttribute("data-sig");
+box.appendChild(el("p",{class:"empty"},[/relation|does not exist|schema cache|messages/i.test(M.err)?"Messaging needs a one-time database setup. Run the latest SQL from the chat, then reload.":"Couldn\u2019t load messages: "+M.err]));return}
+if(!M.loaded)return;
+var all=M.list.concat(M.pending);
+if(!r.id){
+var by={};
+all.forEach(function(m){var o=m.sender===me.id?m.recipient:m.sender;var c=by[o]||(by[o]={id:o,last:null,unread:0});c.last=m;if(m.recipient===me.id&&!m.read)c.unread++});
+D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===me.id?f.addressee:f.requester;if(D.names[o]&&!by[o])by[o]={id:o,last:null,unread:0}});
+var rows=Object.keys(by).map(function(k){return by[k]}).filter(function(c){return D.blocked.indexOf(c.id)<0}).sort(function(a,b){
+if(a.last&&b.last)return new Date(b.last.created_at)-new Date(a.last.created_at);if(a.last)return -1;if(b.last)return 1;return nm(a.id).localeCompare(nm(b.id))});
+var sig="L"+rows.map(function(c){return c.id+(c.last?c.last.id:"")+c.unread}).join("|");
+if(box.getAttribute("data-sig")===sig)return;box.setAttribute("data-sig",sig);box.innerHTML="";
+if(!rows.length){box.appendChild(el("p",{class:"empty"},["Add some friends to start a conversation."]));return}
+rows.forEach(function(c){box.appendChild(el("a",{href:"#messages/"+c.id,class:"row note"+(c.unread?" unread":"")},[av(c.id),
+el("span",{},[el("b",{},[nm(c.id)]),el("small",{class:"when"},[c.last?msgSnippet(c.last):"No messages yet"])]),
+c.unread?el("span",{class:"mbadge"},[String(c.unread)]):""]))});
+return}
+var id=r.id;
+var th=all.filter(function(m){return(m.sender===me.id&&m.recipient===id)||(m.sender===id&&m.recipient===me.id)});
+var sig2="T"+id+"|"+th.map(function(m){return m.id+(m.read?"r":"u")}).join(",");
+if(box.getAttribute("data-sig")!==sig2){
+var prev=box.firstChild,atBottom=!prev||!prev.scrollHeight||(prev.scrollHeight-prev.scrollTop-prev.clientHeight<60);
+box.setAttribute("data-sig",sig2);box.innerHTML="";
+var list=el("div",{class:"mlist"},th.length?th.map(function(m){var mine=m.sender===me.id;
+return el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[m.body,el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)])])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
+box.appendChild(list);if(atBottom)list.scrollTop=list.scrollHeight}
+if(th.some(function(m){return m.sender===id&&!m.read}))markRead(id)}
+function sendMsg(id,input){
+var v=input.value.trim();if(!v)return;
+var ee=document.getElementById("merr");if(ee)ee.textContent="";
+input.value="";
+var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:v.slice(0,2000),created_at:new Date().toISOString(),read:false};
+M.pending.push(tmp);paintMsgs();
+sb.from("messages").insert({sender:me.id,recipient:id,body:tmp.body}).then(async function(r){
+M.pending=M.pending.filter(function(x){return x!==tmp});
+if(r.error){var e2=document.getElementById("merr");
+if(e2)e2.textContent=/row-level|policy/i.test(r.error.message||"")?"You can only message your friends.":(r.error.message||"Couldn\u2019t send. Try again.");
+input.value=v;paintMsgs();return}
+M.busy=false;await loadMsgs();paintMsgs()})}
+function messagesPage(id){
+if(!M.busy)loadMsgs().then(paintMsgs);
+var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
+setTimeout(paintMsgs,0);
+if(!id)return el("div",{class:"card"},[el("h3",{style:"margin-bottom:8px"},["Messages"]),box]);
+var head=el("div",{class:"row",style:"margin-bottom:8px"},[el("a",{href:"#messages",class:"link"},["\u2190 All"]),av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
+var kids=[head,box];
+if(isFriend(id)){
+var inp=el("input",{placeholder:"Write a message","aria-label":"Write a message",maxlength:"2000",autocomplete:"off"});
+inp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(id,inp)}});
+kids.push(el("div",{class:"mcomp"},[inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
+setTimeout(function(){inp.focus()},50)}
+else kids.push(el("p",{class:"empty"},["You can only send messages to friends."]));
+return el("div",{class:"card"},kids)}
 function friendsOf(id){
 var seen={};
 D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===id?f.addressee:(f.addressee===id?f.requester:null);
@@ -485,6 +569,7 @@ if(r.name==="notifications")body=notesPage();
 else if(r.name==="settings")body=settingsPage();
 else if(r.name==="profile")body=profilePage(r.id);
 else if(r.name==="post")body=postPage(r.id);
+else if(r.name==="messages")body=messagesPage(r.id);
 else body=homePage();
 return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
@@ -632,6 +717,7 @@ var o=document.querySelectorAll(".react.open");for(var i=0;i<o.length;i++)if(!o[
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
+setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
 if(!me)return;
 var r=await sb.from("notifications").select("id",{count:"exact",head:true}).eq("read",false);
