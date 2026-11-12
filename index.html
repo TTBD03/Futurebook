@@ -75,6 +75,39 @@ input[type=file]{padding:8px}
 label.f{display:block}
 label.f span{display:block;font-weight:600;margin:6px 0 4px}
 select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;font:inherit;color:inherit}
+.react{position:relative;display:inline-block}
+.rbtn{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.rbtn .em{display:inline-block;filter:grayscale(1);opacity:.65}
+.rbtn.on .em{filter:none;opacity:1}
+.rbtn.pop .em{animation:rbtnpop .55s cubic-bezier(.3,1.8,.5,1)}
+@keyframes rbtnpop{0%{transform:scale(.3) rotate(-25deg)}60%{transform:scale(1.55) rotate(10deg)}100%{transform:none}}
+.rpick{position:absolute;left:0;bottom:calc(100% + 6px);display:flex;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 8px;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;visibility:hidden;transform:translateY(10px) scale(.9);transform-origin:left bottom;transition:opacity .15s,transform .2s,visibility 0s .2s;z-index:20}
+.rpick::after{content:"";position:absolute;left:0;right:0;top:100%;height:10px}
+.react.open .rpick{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.react.open .rpick button{animation:rin .35s cubic-bezier(.3,1.6,.5,1) both;animation-delay:calc(var(--i)*45ms)}
+@media (hover:hover){.react:hover .rpick{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.react:hover .rpick button{animation:rin .35s cubic-bezier(.3,1.6,.5,1) both;animation-delay:calc(var(--i)*45ms)}}
+.react:has(:focus-visible) .rpick{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+@keyframes rin{from{opacity:0;transform:translateY(14px) scale(.4)}to{opacity:1;transform:none}}
+.rpick button{background:none;border:0;font-size:1.7rem;line-height:1;padding:4px;border-radius:50%;cursor:pointer;transition:transform .15s}
+.rpick button span{display:inline-block}
+.rpick button:hover,.rpick button:focus-visible{transform:scale(1.4) translateY(-6px)}
+.k-like:hover span,.k-like:focus-visible span{animation:rwow .6s ease-in-out infinite}
+.k-haha:hover span,.k-haha:focus-visible span{animation:rlaugh .45s ease-in-out infinite}
+.k-sad:hover span,.k-sad:focus-visible span{animation:rsad 1.1s ease-in-out infinite}
+.k-wow:hover span,.k-wow:focus-visible span{animation:rwow .6s ease-in-out infinite}
+.k-angry:hover span,.k-angry:focus-visible span{animation:rangry .22s linear infinite}
+.k-confused:hover span,.k-confused:focus-visible span{animation:rconf 1s ease-in-out infinite}
+@keyframes rlaugh{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg) translateY(-2px)}}
+@keyframes rsad{0%,100%{transform:translateY(0)}50%{transform:translateY(3px) scale(.92)}}
+@keyframes rwow{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+@keyframes rangry{0%,100%{transform:translateX(-2px)}50%{transform:translateX(2px)}}
+@keyframes rconf{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+.fly{position:absolute;left:8px;bottom:100%;font-size:1.25rem;pointer-events:none;opacity:0;animation:rfly 1s ease-out forwards;animation-delay:calc(var(--d)*1ms);z-index:21}
+@keyframes rfly{0%{opacity:0;transform:translate(0,0) scale(.5)}15%{opacity:1}100%{opacity:0;transform:translate(var(--x),-70px) scale(1.2)}}
+.rsum{display:inline-flex;gap:10px;color:var(--mute);font-size:.95rem;align-items:center}
+.rsum span{white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.rpick,.rpick button,.rpick button span,.rbtn .em,.fly{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -97,6 +130,11 @@ function nm(id){var p=D&&D.names[id];return p||"Someone"}
 function av(id){var pic=D&&D.avatars&&D.avatars[id];if(pic)return el("img",{class:"av",src:pic,alt:""});var h=0;for(var i=0;i<id.length;i++)h=(h+id.charCodeAt(i))%COLORS.length;var e=el("div",{class:"av"},[nm(id).charAt(0).toUpperCase()]);e.style.background=COLORS[h];return e}
 async function act(fn){try{await fn()}catch(e){say(e.message||"Something went wrong. Try again.")}await refresh()}
 
+async function likesQ(){
+var x=await sb.from("likes").select("post_id,user_id,reaction");
+if(!x.error)return x;
+return sb.from("likes").select("post_id,user_id")}
+
 async function profilesQ(){
 var x=await sb.from("profiles").select("id,name,avatar_url,username,bio,cover_url,verified");
 if(!x.error)return x;
@@ -106,7 +144,7 @@ async function loadData(){
 var r=await Promise.all([
 profilesQ(),
 sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_at",{ascending:false}).limit(60),
-sb.from("likes").select("post_id,user_id"),
+likesQ(),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
 sb.from("friendships").select("id,requester,addressee,status"),
 sb.from("blocks").select("blocked"),
@@ -213,7 +251,7 @@ nav("#profile","Profile",null,r.name==="profile"&&r.id===me.id),
 nav("#settings","Settings",null,r.name==="settings"),
 el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");location.hash="";await refresh()}},["Log out"])])])}
 function notesPage(){
-var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"liked your post.",comment:"commented on your post."};
+var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"reacted to your post.",comment:"commented on your post."};
 var fresh=D.notes.filter(function(n){return !n.read}).map(function(n){return n.id});
 var items=D.notes.map(function(n){
 var href=(n.type==="friend_request"||n.type==="friend_accept")?"#profile/"+n.actor:"#home";
@@ -383,15 +421,51 @@ return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"])])])}
 
+var REACTS=[["like","👍","Like"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null;
+function rx(k){for(var i=0;i<REACTS.length;i++)if(REACTS[i][0]===k)return REACTS[i];return REACTS[0]}
+function calm(){return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)}
+function react(p,key){
+var mine=D.likes.filter(function(l){return l.post_id===p.id&&l.user_id===me.id})[0];
+var same=!!mine&&rx(mine.reaction)[0]===key;
+D.likes=D.likes.filter(function(l){return !(l.post_id===p.id&&l.user_id===me.id)});
+if(same)burst=null;else{D.likes.push({post_id:p.id,user_id:me.id,reaction:key});burst={post:p.id,key:key}}
+draw();
+act(async function(){
+var r;
+if(same)r=await sb.from("likes").delete().eq("post_id",p.id).eq("user_id",me.id);
+else if(mine){r=await sb.from("likes").update({reaction:key}).eq("post_id",p.id).eq("user_id",me.id).select();
+if(!r.error&&(!r.data||!r.data.length))throw new Error("Couldn’t change your reaction. Please try again.")}
+else r=await sb.from("likes").insert(key==="like"?{post_id:p.id,user_id:me.id}:{post_id:p.id,user_id:me.id,reaction:key});
+if(r.error)throw r.error})}
+function reactBar(p,likes){
+var mine=likes.filter(function(l){return l.user_id===me.id})[0],my=mine?rx(mine.reaction):null;
+var pop=burst&&burst.post===p.id?burst:null;if(pop)burst=null;
+var lp=false,tm=null,wrap;
+var main=el("button",{class:"rbtn"+(mine?" on":"")+(pop?" pop":""),"aria-pressed":String(!!mine),"aria-haspopup":"true",
+onclick:function(){if(lp){lp=false;return}react(p,mine?rx(mine.reaction)[0]:"like")},
+ontouchstart:function(){lp=false;tm=setTimeout(function(){lp=true;wrap.classList.add("open")},450)},
+ontouchend:function(){clearTimeout(tm)},
+ontouchmove:function(){clearTimeout(tm)},
+oncontextmenu:function(e){if(e&&e.preventDefault)e.preventDefault()}},
+[el("span",{class:"em"},[my?my[1]:"👍"])," "+(my?my[2]:"Like")]);
+var pick=el("div",{class:"rpick",role:"group","aria-label":"Choose a reaction"},REACTS.map(function(r,i){
+return el("button",{class:"k-"+r[0],"aria-label":r[2],title:r[2],style:"--i:"+i,onclick:function(e){if(e&&e.stopPropagation)e.stopPropagation();react(p,r[0])}},[el("span",{},[r[1]])])}));
+wrap=el("div",{class:"react"},[main,pick]);
+if(pop&&!calm()){var em=rx(pop.key)[1];
+for(var i=0;i<6;i++){var f=el("span",{class:"fly","aria-hidden":"true",style:"--x:"+(Math.round(Math.random()*90)-45)+"px;--d:"+(i*70)},[em]);wrap.appendChild(f);
+(function(f){setTimeout(function(){if(f.parentNode)f.parentNode.removeChild(f)},1500)})(f)}}
+return wrap}
+function reactSum(likes){
+var n={};likes.forEach(function(l){var k=rx(l.reaction)[0];n[k]=(n[k]||0)+1});
+var chips=REACTS.filter(function(r){return n[r[0]]}).map(function(r){return el("span",{title:r[2],"aria-label":n[r[0]]+" "+r[2]},[r[1]+" "+n[r[0]]])});
+return chips.length?el("span",{class:"rsum"},chips):""}
 function post(p){
 var likes=D.likes.filter(function(l){return l.post_id===p.id});
-var liked=likes.some(function(l){return l.user_id===me.id});
 var cms=D.comments.filter(function(c){return c.post_id===p.id});
 var cin=el("input",{placeholder:"Write a comment","aria-label":"Write a comment",maxlength:"1000"});
 cin.addEventListener("keydown",function(e){if(e.key==="Enter"&&cin.value.trim()){var v=cin.value.trim();
 act(async function(){var r=await sb.from("comments").insert({post_id:p.id,user_id:me.id,body:v});if(r.error)throw r.error})}});
-var acts=[el("button",{class:liked?"on":"","aria-pressed":String(liked),onclick:function(){act(async function(){
-var r=liked?await sb.from("likes").delete().eq("post_id",p.id).eq("user_id",me.id):await sb.from("likes").insert({post_id:p.id,user_id:me.id});if(r.error)throw r.error})}},[(liked?"Liked":"Like")+" ("+likes.length+")"]),
+var acts=[reactBar(p,likes),reactSum(likes),
 el("span",{class:"empty"},[cms.length+(cms.length===1?" comment":" comments")])];
 if(p.user_id!==me.id){
 acts.push(el("button",{onclick:function(){var why=prompt("Why are you reporting this post?");if(!why||!why.trim())return;
@@ -427,6 +501,8 @@ box("Friend requests",reqs,"No new requests."),
 box("People you may know",others.concat(sent),"No one else has joined yet. Invite a friend!"),
 box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
+if(document.addEventListener&&document.querySelectorAll)document.addEventListener("click",function(e){
+var o=document.querySelectorAll(".react.open");for(var i=0;i<o.length;i++)if(!o[i].contains(e.target))o[i].classList.remove("open")});
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
 window.addEventListener("hashchange",function(){say("");editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
