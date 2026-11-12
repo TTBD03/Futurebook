@@ -94,7 +94,15 @@ sb.from("blocks").select("blocked"),
 sb.from("notifications").select("id,actor,type,post_id,read,created_at").order("created_at",{ascending:false}).limit(30)]);
 for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;
 var names={},avatars={};r[0].data.forEach(function(p){names[p.id]=p.name;if(p.avatar_url)avatars[p.id]=p.avatar_url});
-D={names:names,posts:r[1].data,likes:r[2].data,comments:r[3].data,fs:r[4].data,blocked:r[5].data.map(function(b){return b.blocked}),avatars:avatars,imgs:{},notes:r[6].data};
+var blocked=r[5].data.map(function(b){return b.blocked});
+function ok(id){return blocked.indexOf(id)<0}
+var posts=r[1].data.filter(function(p){return ok(p.user_id)});
+var shown={};posts.forEach(function(p){shown[p.id]=1});
+D={names:names,posts:posts,
+likes:r[2].data.filter(function(l){return ok(l.user_id)&&shown[l.post_id]}),
+comments:r[3].data.filter(function(c){return ok(c.user_id)&&shown[c.post_id]}),
+fs:r[4].data,blocked:blocked,avatars:avatars,imgs:{},
+notes:r[6].data.filter(function(n){return ok(n.actor)})};
 var paths=D.posts.filter(function(p){return p.image_path}).map(function(p){return p.image_path});
 if(paths.length){var su=await sb.storage.from("post-images").createSignedUrls(paths,3600);
 if(!su.error)su.data.forEach(function(x){if(x.signedUrl)D.imgs[x.path]=x.signedUrl})}}
