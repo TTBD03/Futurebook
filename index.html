@@ -407,14 +407,6 @@ for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(m
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
 await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])])}
-async function placeName(lat,lon){
-var r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&lat="+lat+"&lon="+lon,{headers:{"Accept-Language":navigator.language||"en"}});
-if(!r.ok)throw new Error("lookup");
-var j=await r.json(),a=j.address||{};
-var parts=[a.amenity||a.tourism||a.leisure||a.building&&j.name||j.name,a.neighbourhood||a.suburb||a.city_district||a.village,a.city||a.town||a.municipality||a.county||a.state,a.country].filter(Boolean);
-var seen={};parts=parts.filter(function(x){if(seen[x])return false;seen[x]=1;return true});
-if(!parts.length)throw new Error("none");
-return parts.slice(0,3).join(", ")}
 function homePage(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
 var pic=el("input",{type:"file",multiple:"multiple",accept:"image/jpeg,image/png,image/webp","aria-label":"Add photos (up to 6)"});
@@ -424,16 +416,21 @@ pic.addEventListener("change",function(){var f=pic.files&&pic.files[0];
 if(f){prev.src=URL.createObjectURL(f);prev.style.display="block";cap.style.display="block"}
 else{prev.removeAttribute("src");prev.style.display="none";cap.style.display="none";cap.value=""}});
 var aud=el("select",{"aria-label":"Who can see this post"},[el("option",{value:"friends"},["\ud83d\udc65 Friends"]),el("option",{value:"public"},["\ud83c\udf10 Public"])]);
-var loc=el("input",{placeholder:"Where are you? Type a place name","aria-label":"Check-in location",maxlength:"120",style:"display:none"});
+var geo=null,pacWrap=el("div",{style:"display:none;margin-bottom:8px"});
+var loc=el("input",{placeholder:"Search Google Maps or type a place name","aria-label":"Check-in location",maxlength:"120",style:"display:none"});
 var gps=el("button",{class:"btn alt",type:"button",style:"display:none"},["Use my current location"]);
+loc.addEventListener("input",function(){geo=null});
 gps.addEventListener("click",function(){
 function done(t){gps.textContent=t;gps.disabled=false;setTimeout(function(){gps.textContent="Use my current location"},3500)}
 if(!navigator.geolocation){done("Location isn\u2019t supported here");return}
 gps.disabled=true;gps.textContent="Locating\u2026";
 navigator.geolocation.getCurrentPosition(function(pos){
-placeName(pos.coords.latitude,pos.coords.longitude).then(function(n){loc.value=n.slice(0,120);gps.textContent="Use my current location";gps.disabled=false}).catch(function(){done("Couldn\u2019t find the place. Type it instead.")})},
+var la=Math.round(pos.coords.latitude*1e5)/1e5,lo=Math.round(pos.coords.longitude*1e5)/1e5;
+function fin(n){loc.value=n.slice(0,120);geo={lat:la,lng:lo};gps.textContent="Use my current location";gps.disabled=false}
+gmLoad().then(function(){return new google.maps.Geocoder().geocode({location:{lat:la,lng:lo}})}).then(function(r){fin(r.results&&r.results[0]?r.results[0].formatted_address:"Current location")}).catch(function(){fin("Current location")})},
 function(){done("Location blocked. Type a place instead.")},{timeout:10000,maximumAge:60000})});
-var lt=el("button",{class:"btn alt",type:"button",onclick:function(){var on=loc.style.display==="none";loc.style.display=on?"block":"none";gps.style.display=on?"inline-block":"none";if(on)loc.focus();else loc.value=""}},["\ud83d\udccd Check in"]);
+
+var lt=el("button",{class:"btn alt",type:"button",onclick:function(){var on=loc.style.display==="none";loc.style.display=on?"block":"none";gps.style.display=on?"inline-block":"none";pacWrap.style.display=on?"block":"none";if(on){loc.focus();if(GMAPS_KEY&&!pacWrap.firstChild)gmLoad().then(function(){var pac=new google.maps.places.PlaceAutocompleteElement();pac.style.cssText="width:100%;color-scheme:light";function pick(pl){if(!pl)return;pl.fetchFields({fields:["displayName","formattedAddress","location","id"]}).then(function(){var n=[pl.displayName,pl.formattedAddress].filter(Boolean).join(", ");loc.value=n.slice(0,120);geo=pl.location?{lat:Math.round(pl.location.lat()*1e5)/1e5,lng:Math.round(pl.location.lng()*1e5)/1e5,pid:pl.id}:null})}pac.addEventListener("gmp-select",function(e){pick(e.placePrediction&&e.placePrediction.toPlace())});pac.addEventListener("gmp-placeselect",function(e){pick(e.place)});pacWrap.appendChild(pac)}).catch(function(){})}else{loc.value="";geo=null}}},["\ud83d\udccd Check in"]);
 var FEELS=["\ud83d\ude0a happy","\ud83d\ude0d loved","\ud83d\ude22 sad","\ud83d\ude0e cool","\ud83e\udd29 excited","\ud83d\ude34 tired","\ud83c\udf55 eating","\u2708\ufe0f traveling","\ud83c\udfb5 listening to music","\ud83c\udfae playing","\ud83d\udcda reading","\ud83c\udfc3 exercising"];
 var BGS=["","linear-gradient(135deg,#3030e8,#7c3aed)","linear-gradient(135deg,#e8453c,#c2410c)","linear-gradient(135deg,#0f9d73,#0e7490)","linear-gradient(135deg,#151530,#3030e8)"];
 var bg="",liveBlob=null,stream=null,rec=null;
@@ -463,17 +460,17 @@ b.addEventListener("click",function(){bg=g;[].forEach.call(swr.children,function
 var panels=[];
 function tg(label,kids){var p=el("div",{class:"panel"},kids);panels.push(p);return [el("button",{class:"btn alt",type:"button",onclick:function(){p.style.display=p.style.display==="block"?"none":"block"}},[label]),p]}
 var T=[tg("\ud83c\udfa5 Video",[vid]),tg("\ud83d\udd34 Live",[lbtn,lvv,lstat]),tg("\ud83d\udd17 Link",[link]),tg("GIF",[gif]),tg("\ud83d\ude0a Feeling",[feel]),tg("\ud83c\udfd7 Tag friends",[friendIds.length?tags:el("p",{class:"hint"},["Add friends to tag them."])]),tg("\ud83c\udfa8 Background",[swr]),tg("\ud83d\udcca Poll",[pq].concat(po)),tg("\ud83d\udd52 Schedule",[when])];
-var box=el("div",{class:"card"},[ta,pic,cap,prev,el("div",{class:"row",style:"margin-bottom:8px"},[lt,gps].concat(T.map(function(t){return t[0]}))),loc].concat(T.map(function(t){return t[1]}),[el("label",{class:"row",style:"margin-bottom:8px"},[off,"Turn off comments"]),aud,el("button",{class:"btn",onclick:function(){
+var box=el("div",{class:"card"},[ta,pic,cap,prev,el("div",{class:"row",style:"margin-bottom:8px"},[lt,gps].concat(T.map(function(t){return t[0]}))),pacWrap,loc].concat(T.map(function(t){return t[1]}),[el("label",{class:"row",style:"margin-bottom:8px"},[off,"Turn off comments"]),aud,el("button",{class:"btn",onclick:function(){
 var v=ta.value.trim(),fs=[].slice.call(pic.files||[],0,6),f=fs[0],vf=(vid.files&&vid.files[0])||liveBlob,gv=safeUrl(gif.value.trim()),lk=safeUrl(link.value.trim());
 var opts=po.map(function(i){return i.value.trim()}).filter(Boolean),pollOn=pq.value.trim()&&opts.length>=2;
 if(!v&&!f&&!vf&&!gv&&!lk&&!pollOn&&!loc.value.trim())return;
 if(vf&&vf.size>50*1024*1024){say("That video is over 50 MB.");draw();return}
-var sched=when.value?new Date(when.value):null;if(sched&&isNaN(sched))sched=null;
+function lv0(){return loc.value.trim()}var sched=when.value?new Date(when.value):null;if(sched&&isNaN(sched))sched=null;
 act(async function(){var path=null,ex={};
 if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error;
 for(var k=1;k<fs.length;k++){var b2=await shrink(fs[k],1280),p2=me.id+"/"+Date.now()+"_"+k+".jpg";var u2=await sb.storage.from("post-images").upload(p2,b2,{contentType:"image/jpeg"});if(u2.error)throw u2.error;(ex.more=ex.more||[]).push(p2)}}
 if(vf){var ext=/mp4/.test(vf.type)?"mp4":/quicktime/.test(vf.type)?"mov":"webm";var vp=me.id+"/"+Date.now()+"v."+ext;var uv=await sb.storage.from("post-images").upload(vp,vf,{contentType:vf.type||"video/webm"});if(uv.error)throw uv.error;ex.video=vp;if(liveBlob&&vf===liveBlob)ex.live=1}
-if(feel.value)ex.feel=feel.value;var tg2=[].filter.call(tags.options,function(o){return o.selected}).map(function(o){return o.value});if(tg2.length)ex.tags=tg2;
+if(feel.value)ex.feel=feel.value;if(geo&&lv0())ex.geo=geo;var tg2=[].filter.call(tags.options,function(o){return o.selected}).map(function(o){return o.value});if(tg2.length)ex.tags=tg2;
 if(lk)ex.link=lk;if(gv)ex.gif=gv;if(bg&&!path&&!vf&&!gv)ex.bg=bg;if(pollOn)ex.poll={q:pq.value.trim(),o:opts};
 var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);if(aud.value==="public")row.visibility="public";var lv=loc.value.trim();if(lv)row.location_name=lv.slice(0,120);
 if(Object.keys(ex).length)row.extra=ex;if(off.checked)row.comments_off=true;if(sched&&sched.getTime()>Date.now())row.scheduled_at=sched.toISOString();
@@ -806,6 +803,17 @@ return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"]),el("span",{class:"cp"},["\u00a9 "+new Date().getFullYear()+" Futurebook. All rights reserved."])])])}
 
+var GMAPS_KEY="";/* paste your Google Maps API key here to turn on place search and named GPS check-ins */
+var gmP=null;
+function gmLoad(){if(!GMAPS_KEY)return Promise.reject();if(gmP)return gmP;
+gmP=new Promise(function(res,rej){window.__gmReady=res;var sc=document.createElement("script");sc.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(GMAPS_KEY)+"&loading=async&v=weekly&callback=__gmReady";sc.async=true;sc.onerror=function(){gmP=null;rej()};document.head.appendChild(sc)})
+.then(function(){return Promise.all([google.maps.importLibrary("places"),google.maps.importLibrary("geocoding")])});return gmP}
+function gmQuery(p){var g=p.extra&&p.extra.geo;if(g&&isFinite(g.lat)&&isFinite(g.lng))return Number(g.lat)+","+Number(g.lng);return p.location_name}
+function gmUrl(p){var g=p.extra&&p.extra.geo;return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(gmQuery(p))+(g&&g.pid&&/^[\w-]+$/.test(g.pid)?"&query_place_id="+g.pid:"")}
+function mapToggle(p){var b=el("button",{type:"button",class:"link",style:"margin-left:8px",onclick:function(){
+var row=b.parentNode,nx=row.nextSibling;if(nx&&nx.className==="gmap"){row.parentNode.removeChild(nx);b.textContent="View map";return}
+var f=el("iframe",{class:"gmap",title:"Map of "+p.location_name,loading:"lazy",referrerpolicy:"no-referrer-when-downgrade",src:"https://maps.google.com/maps?q="+encodeURIComponent(gmQuery(p))+"&z=15&output=embed"});
+f.style.cssText="width:100%;height:220px;border:0;border-radius:12px;margin:0 0 8px;display:block";row.parentNode.insertBefore(f,row.nextSibling);b.textContent="Hide map"}},["View map"]);return b}
 var REACTS=[["like","👍","Like"],["love","❤️","Love"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null,openLikes=null,shareFor=null,ptab="posts";
 var RICON={
 like:'<circle cx="16" cy="16" r="15" fill="url(#fbB)"/><path fill="#fff" d="M9.5 14.5h3.2v9h-3.2zM14 14.5l3-6.2c1.6 0 2.5 1.3 2.2 2.8l-.6 2.9h4.4c1.1 0 1.9 1 1.7 2.1l-1.3 6.3c-.2 1-1 1.7-2 1.7H14z"/>',
@@ -955,7 +963,7 @@ menuEl=el("div",{class:"pmenu",onmouseleave:function(){clearTimeout(window.__pmT
 var art=el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.scheduled_at&&new Date(p.scheduled_at).getTime()<=Date.now()?p.scheduled_at:p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
 p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nm(p.shared_from_user)])]):"",
-p.location_name?el("p",{class:"empty",style:"margin:0 0 6px"},["\ud83d\udccd ",el("a",{href:"https://www.openstreetmap.org/search?query="+encodeURIComponent(p.location_name),target:"_blank",rel:"noopener noreferrer"},[p.location_name])]):"",
+p.location_name?el("p",{class:"empty",style:"margin:0 0 6px"},["\ud83d\udccd ",el("a",{href:gmUrl(p),target:"_blank",rel:"noopener noreferrer"},[p.location_name]),mapToggle(p)]):"",
 xtra(p),p.body.trim()?(p.extra&&p.extra.bg?el("div",{class:"bgp",style:"background:"+p.extra.bg},[p.body]):el("p",{},[p.body])):"",...mediaEl(p),
 p.image_path?capEl(p):"",
 p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:p.caption||("Photo shared by "+nm(p.user_id)),loading:"lazy"}):"",
