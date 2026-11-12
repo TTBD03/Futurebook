@@ -266,7 +266,7 @@ function nav(href,label,id,cur){return el("a",{href:href,class:"nav"+(cur?" cur"
 function header(){
 var n=unread(),r=route();
 return el("header",{class:"top"},[
-el("a",{href:"#home",class:"logo"},["Futurebook"]),
+el("a",{href:"#home",class:"logo",onclick:function(e){e.preventDefault();history.replaceState(null,"",location.pathname+location.search+"#home");location.reload()}},["Futurebook"]),
 el("nav",{class:"row","aria-label":"Main"},[
 nav("#home","Home",null,r.name==="home"),
 nav("#notifications","Notifications"+(n?" ("+n+")":""),"bell",r.name==="notifications"),
