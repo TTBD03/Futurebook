@@ -375,13 +375,14 @@ el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("s
 if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).then(function(r){
 if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
+var stab="account";
 function settingsPage(){
 var np=el("input",{type:"password",placeholder:"New password (at least 6 characters)","aria-label":"New password",autocomplete:"new-password"});
 var nn=el("input",{value:nm(me.id),maxlength:"60",placeholder:"Full name","aria-label":"Full name",autocomplete:"name"});
 var conf=el("input",{placeholder:"Type DELETE to confirm","aria-label":"Type DELETE to confirm",autocomplete:"off"});
-return el("div",{class:"card"},[
-el("h3",{},["Account settings"]),
-el("p",{class:"empty"},["Signed in as "+me.email]),
+function tab(key,label){return el("button",{type:"button",role:"tab","aria-selected":String(stab===key),onclick:function(){stab=key;say("");draw()}},[label])}
+var tabs=el("div",{class:"ptabs",role:"tablist"},[tab("account","Account"),tab("security","Security"),tab("privacy","Privacy")]);
+var acct=[el("p",{class:"empty"},["Signed in as "+me.email]),
 el("h3",{class:"sub"},["Name"]),nn,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 var v=nn.value.trim().replace(/\s+/g," ");
@@ -392,12 +393,6 @@ if(r.error)throw r.error;
 if(!r.data||!r.data.length)throw new Error("Couldn\u2019t save your name. Try again.");
 try{await sb.auth.updateUser({data:{name:v}})}catch(e){}
 say("Name updated.",true)})}},["Change name"]),
-el("h3",{class:"sub"},["Change password"]),np,
-el("button",{class:"btn alt",onclick:function(){act(async function(){
-if(np.value.length<6)throw new Error("Use at least 6 characters.");
-var r=await sb.auth.updateUser({password:np.value});if(r.error)throw r.error;say("Password changed.",true)})}},["Change password"]),
-el("h3",{class:"sub"},["Blocked people"]),
-el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
 el("h3",{class:"sub"},["Profile verification"]),
 el("p",{class:"empty"},[(D.info[me.id]&&D.info[me.id].verified)?"Your profile is verified.":"Verified profiles show a ✓ next to the name. Requests are reviewed by the Futurebook team."]),
 (D.info[me.id]&&D.info[me.id].verified)?"":el("button",{class:"btn alt",onclick:function(){var why=prompt("Tell us why you’d like to be verified (optional):");if(why===null)return;
@@ -417,7 +412,24 @@ var buckets=["post-images","avatars","covers","message-media"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
-await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])])}
+await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])];
+var sec=[
+el("h3",{class:"sub"},["Change password"]),np,
+el("button",{class:"btn alt",onclick:function(){act(async function(){
+if(np.value.length<6)throw new Error("Use at least 6 characters.");
+var r=await sb.auth.updateUser({password:np.value});if(r.error)throw r.error;say("Password changed.",true)})}},["Change password"]),
+el("h3",{class:"sub"},["Devices"]),
+el("p",{class:"empty"},["Signed in somewhere you don\u2019t use anymore? This logs you out everywhere except this device."]),
+el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.auth.signOut({scope:"others"});if(r.error)throw r.error;say("Logged out of all other devices.",true)})}},["Log out other devices"])];
+var priv=[
+el("h3",{class:"sub"},["Blocked people"]),
+el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
+el("h3",{class:"sub"},["Who can see your details"]),
+el("p",{class:"empty"},["Your email and phone are shared with friends only unless you choose otherwise. To set Public, Friends or Only me for each detail, open your profile and choose Edit profile."]),
+el("a",{class:"btn alt",href:"#profile/"+me.id,style:"display:inline-block;text-decoration:none"},["Go to my profile"]),
+el("h3",{class:"sub"},["Policies"]),
+el("p",{class:"empty"},[el("a",{href:"privacy.html"},["Privacy Policy"])," \u00b7 ",el("a",{href:"terms.html"},["Terms"])])];
+return el("div",{class:"card"},[el("h3",{},["Settings"]),tabs].concat(stab==="security"?sec:stab==="privacy"?priv:acct))}
 async function placeName(lat,lon){
 var r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&lat="+lat+"&lon="+lon,{headers:{"Accept-Language":navigator.language||"en"}});
 if(!r.ok)throw new Error("lookup");
@@ -1004,7 +1016,7 @@ document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu()}
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
-window.addEventListener("hashchange",function(){say("");ptab="posts";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
+window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
 setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
