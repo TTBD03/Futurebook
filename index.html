@@ -69,6 +69,8 @@ img.av{object-fit:cover}
 .mvid{max-width:260px;max-height:300px;border-radius:10px;display:block;background:#000}
 .maud{width:230px;max-width:100%;display:block}
 .mfile{color:inherit;text-decoration:underline}
+.mstage{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:12px}
+.mstage input{margin:8px 0}
 .mtools{display:flex;gap:6px}
 .mtools .btn{padding:8px 11px}
 .mrec{display:none;align-items:center;gap:10px;margin-top:8px;color:var(--like);font-weight:600}
@@ -514,20 +516,35 @@ mr.onstop=function(){if(r.cancelled)return;var type=(mr.mimeType||mt||"audio/web
 rec=r;mr.start();
 var bar=document.getElementById("mrec");if(bar){bar.style.display="flex";var tt=bar.querySelector(".mt");tt.textContent="0:00";
 r.tm=setInterval(function(){var sec=Math.floor((Date.now()-r.start)/1000);tt.textContent=fmtT(sec);if(sec>=180)stopRec(true)},500)}}
+var stg=null;
+function clearStage(){if(stg&&stg.url)URL.revokeObjectURL(stg.url);stg=null;var p=document.getElementById("mstage");if(p){p.style.display="none";p.innerHTML=""}}
+function showStage(id,file,kind,name,ctype){
+var p=document.getElementById("mstage"),ee=document.getElementById("merr");if(!p)return;
+if(ee)ee.textContent="";
+if(file.size>25*1024*1024){if(ee)ee.textContent="That file is too large (max 25 MB).";return}
+clearStage();
+var url=URL.createObjectURL(file);stg={url:url};
+var prev=kind==="image"?el("img",{class:"mimg",src:url,alt:name}):kind==="video"?el("video",{class:"mvid",controls:"controls",preload:"metadata",playsinline:"playsinline",src:url},[]):el("div",{},["\ud83d\udcce "+name+" ("+fmtSize(file.size)+")"]);
+var cap=el("input",{placeholder:"Add a caption (optional)","aria-label":"Caption",maxlength:"1000",autocomplete:"off"});
+var go=el("button",{class:"btn",type:"button",onclick:function(){var c=cap.value.trim();clearStage();sendMedia(id,file,kind,name,ctype,c)}},["Send"]);
+cap.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();go.click()}});
+p.appendChild(prev);p.appendChild(cap);
+p.appendChild(el("div",{class:"row"},[go,el("button",{class:"btn alt",type:"button",onclick:clearStage},["Cancel"])]));
+p.style.display="block";cap.focus()}
 var BAD_EXT=/\.(exe|bat|cmd|com|msi|scr|vbs|js|jar|apk|sh|ps1|dll)$/i;
-async function sendMedia(id,file,kind,name,ctype){
+async function sendMedia(id,file,kind,name,ctype,caption){
 var ee=document.getElementById("merr");if(ee)ee.textContent="";
 if(file.size>25*1024*1024){if(ee)ee.textContent="That file is too large (max 25 MB).";return}
 var ext=(name.match(/\.([A-Za-z0-9]{1,8})$/)||[])[1]||"bin";
 if(kind==="audio")ext=ctype.indexOf("mp4")>-1?"m4a":ctype.indexOf("ogg")>-1?"ogg":"webm";
 if(kind==="image")ext="jpg";
 var path=me.id+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext.toLowerCase();
-var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:"",media_type:kind,media_name:name,localUrl:URL.createObjectURL(file),created_at:new Date().toISOString(),read:false};
+var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:(caption||"").slice(0,2000),media_type:kind,media_name:name,localUrl:URL.createObjectURL(file),created_at:new Date().toISOString(),read:false};
 M.pending.push(tmp);paintMsgs();
 try{
 var up=await sb.storage.from("message-media").upload(path,file,{contentType:ctype||"application/octet-stream"});
 if(up.error)throw up.error;
-var r=await sb.from("messages").insert({sender:me.id,recipient:id,body:"",media_path:path,media_type:kind,media_name:name.slice(0,200),media_size:file.size});
+var r=await sb.from("messages").insert({sender:me.id,recipient:id,body:(caption||"").slice(0,2000),media_path:path,media_type:kind,media_name:name.slice(0,200),media_size:file.size});
 if(r.error){await sb.storage.from("message-media").remove([path]);throw r.error}
 }catch(e){
 M.pending=M.pending.filter(function(x){return x!==tmp});
@@ -580,7 +597,7 @@ if(e2)e2.textContent=/row-level|policy/i.test(r.error.message||"")?"You can only
 input.value=v;paintMsgs();return}
 M.busy=false;await loadMsgs();paintMsgs()})}
 function messagesPage(id){
-stopRec(false);
+stopRec(false);clearStage();
 if(!M.busy)loadMsgs().then(paintMsgs);
 var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
 setTimeout(paintMsgs,0);
@@ -593,13 +610,13 @@ inp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.pr
 var ee0=function(t){var e=document.getElementById("merr");if(e)e.textContent=t};
 var pf=el("input",{type:"file",accept:"image/*,video/*",style:"display:none","aria-label":"Choose a photo or video",onchange:async function(e){
 var f=e.target.files[0];e.target.value="";if(!f)return;
-if(f.type.indexOf("image/")===0){var b;try{b=await shrink(f,1600)}catch(x){ee0("Couldn\u2019t read that image.");return}sendMedia(id,b,"image",f.name,"image/jpeg")}
-else if(f.type.indexOf("video/")===0)sendMedia(id,f,"video",f.name,f.type);
+if(f.type.indexOf("image/")===0){var b;try{b=await shrink(f,1600)}catch(x){ee0("Couldn\u2019t read that image.");return}showStage(id,b,"image",f.name,"image/jpeg")}
+else if(f.type.indexOf("video/")===0)showStage(id,f,"video",f.name,f.type);
 else ee0("Choose a photo or a video.")}});
 var af=el("input",{type:"file",style:"display:none","aria-label":"Choose a file to attach",onchange:function(e){
 var f=e.target.files[0];e.target.value="";if(!f)return;
 if(BAD_EXT.test(f.name)){ee0("That file type can\u2019t be sent.");return}
-sendMedia(id,f,"file",f.name,f.type)}});
+showStage(id,f,"file",f.name,f.type)}});
 var tools=el("div",{class:"mtools"},[
 el("button",{class:"btn alt",type:"button",title:"Attach a file","aria-label":"Attach a file",onclick:function(){af.click()}},["\ud83d\udcce"]),
 el("button",{class:"btn alt",type:"button",title:"Send a photo or video","aria-label":"Send a photo or video",onclick:function(){pf.click()}},["\ud83d\uddbc\ufe0f"]),
@@ -607,7 +624,7 @@ el("button",{class:"btn alt",type:"button",title:"Record a voice note","aria-lab
 var bar=el("div",{class:"mrec",id:"mrec"},[el("span",{},["\u25cf Recording"]),el("span",{class:"mt"},["0:00"]),
 el("button",{class:"btn alt",type:"button",onclick:function(){stopRec(false)}},["Cancel"]),
 el("button",{class:"btn",type:"button",onclick:function(){stopRec(true)}},["Send"])]);
-kids.push(bar,el("div",{class:"mcomp"},[pf,af,tools,inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
+kids.push(bar,el("div",{class:"mstage",id:"mstage",style:"display:none"},[]),el("div",{class:"mcomp"},[pf,af,tools,inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
 setTimeout(function(){inp.focus()},50)}
 else kids.push(el("p",{class:"empty"},["You can only send messages to friends."]));
 return el("div",{class:"card"},kids)}
