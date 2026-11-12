@@ -430,7 +430,7 @@ return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"])])])}
 
-var REACTS=[["like","👍","Like"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null,openLikes=null;
+var REACTS=[["like","👍","Like"],["love","❤️","Love"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null,openLikes=null;
 function rx(k){for(var i=0;i<REACTS.length;i++)if(REACTS[i][0]===k)return REACTS[i];return REACTS[0]}
 function calm(){return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)}
 function react(p,key){
