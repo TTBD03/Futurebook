@@ -377,10 +377,21 @@ if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getEl
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
 function settingsPage(){
 var np=el("input",{type:"password",placeholder:"New password (at least 6 characters)","aria-label":"New password",autocomplete:"new-password"});
+var nn=el("input",{value:nm(me.id),maxlength:"60",placeholder:"Full name","aria-label":"Full name",autocomplete:"name"});
 var conf=el("input",{placeholder:"Type DELETE to confirm","aria-label":"Type DELETE to confirm",autocomplete:"off"});
 return el("div",{class:"card"},[
 el("h3",{},["Account settings"]),
 el("p",{class:"empty"},["Signed in as "+me.email]),
+el("h3",{class:"sub"},["Name"]),nn,
+el("button",{class:"btn alt",onclick:function(){act(async function(){
+var v=nn.value.trim().replace(/\s+/g," ");
+if(v.length<2)throw new Error("Enter your full name (at least 2 characters).");
+if(v===nm(me.id))throw new Error("That is already your name.");
+var r=await sb.from("profiles").update({name:v}).eq("id",me.id).select();
+if(r.error)throw r.error;
+if(!r.data||!r.data.length)throw new Error("Couldn\u2019t save your name. Try again.");
+try{await sb.auth.updateUser({data:{name:v}})}catch(e){}
+say("Name updated.",true)})}},["Change name"]),
 el("h3",{class:"sub"},["Change password"]),np,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 if(np.value.length<6)throw new Error("Use at least 6 characters.");
