@@ -72,7 +72,7 @@ async function act(fn){try{await fn()}catch(e){say(e.message||"Something went wr
 async function loadData(){
 var r=await Promise.all([
 sb.from("profiles").select("id,name,avatar_url"),
-sb.from("posts").select("id,user_id,body,created_at").order("created_at",{ascending:false}).limit(60),
+sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_at",{ascending:false}).limit(60),
 sb.from("likes").select("post_id,user_id"),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
 sb.from("friendships").select("id,requester,addressee,status"),
