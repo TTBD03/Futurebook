@@ -919,8 +919,8 @@ return o.length?el("div",{class:"row",style:"margin:6px 0"},o):""}
 function mediaEl(p){var e=p.extra||{},k=[],more=(e.more||[]).filter(function(x){return D.imgs[x]});
 if(more.length)k.push(el("div",{class:"grid"},[p.image_path].concat(more).filter(function(x){return D.imgs[x]}).map(function(x){return el("img",{src:D.imgs[x],alt:"Photo by "+nm(p.user_id),loading:"lazy"})})));
 if(e.video&&D.imgs[e.video])k.push(el("video",{src:D.imgs[e.video],controls:"controls",playsinline:"playsinline",preload:"metadata",class:"pimg","aria-label":e.live?"Live video":"Video"}));
-if(e.gif)k.push(el("img",{class:"pimg",src:e.gif,alt:"GIF",loading:"lazy",referrerpolicy:"no-referrer"}));
-if(e.link)k.push(el("a",{class:"lnk",href:e.link,target:"_blank",rel:"noopener noreferrer"},["\ud83d\udd17 "+e.link]));
+if(safeUrl(e.gif))k.push(el("img",{class:"pimg",src:e.gif,alt:"GIF",loading:"lazy",referrerpolicy:"no-referrer"}));
+if(safeUrl(e.link))k.push(el("a",{class:"lnk",href:e.link,target:"_blank",rel:"noopener noreferrer"},["\ud83d\udd17 "+e.link]));
 if(e.poll){var vs=D.votes.filter(function(v){return v.post_id===p.id}),mine=vs.filter(function(v){return v.user_id===me.id})[0],tot=vs.length;
 k.push(el("div",{style:"margin:8px 0"},[el("b",{},[e.poll.q])].concat(e.poll.o.map(function(t,n){var c=vs.filter(function(v){return v.opt===n}).length,pc=tot?Math.round(c*100/tot):0;
 return el("button",{type:"button",class:"pollo","aria-pressed":mine&&mine.opt===n?"true":"false",onclick:function(){act(async function(){var r=await sb.from("poll_votes").upsert({post_id:p.id,user_id:me.id,opt:n});if(r.error)throw new Error("Voting needs the database update (poll_votes table).")})}},[el("i",{style:"width:"+pc+"%"}),el("span",{},[t+" \u00b7 "+c+(mine&&mine.opt===n?" \u2713":"")])])})).concat([el("small",{class:"when"},[tot+(tot===1?" vote":" votes")])])))}
@@ -930,7 +930,8 @@ a.push(el("button",{type:"button",onclick:function(){var v=prompt("Edit your pos
 a.push(el("button",{type:"button",onclick:function(){act(async function(){var r=await sb.from("posts").update({pinned:!p.pinned}).eq("id",p.id);if(r.error)throw dbErr(r.error)})}},[p.pinned?"Unpin":"Pin"]));
 a.push(el("button",{type:"button",onclick:function(){act(async function(){var r=await sb.from("posts").update({comments_off:!p.comments_off}).eq("id",p.id);if(r.error)throw dbErr(r.error)})}},[p.comments_off?"Turn on comments":"Turn off comments"]));
 var s2=el("select",{"aria-label":"Change audience",style:"width:auto;margin:0;padding:2px 8px",onchange:function(){var v=s2.value;act(async function(){var r=await sb.from("posts").update({visibility:v}).eq("id",p.id);if(r.error)throw dbErr(r.error)})}},[el("option",{value:"friends"},["\ud83d\udc65 Friends"]),el("option",{value:"public"},["\ud83c\udf10 Public"])]);s2.value=p.visibility==="public"?"public":"friends";a.push(s2);return a}
-function post(p){
+function post(p){try{return postRaw(p)}catch(err){return el("p",{class:"empty"},["This post couldn\u2019t be displayed."])}}
+function postRaw(p){
 var likes=D.likes.filter(function(l){return l.post_id===p.id});
 var cms=D.comments.filter(function(c){return c.post_id===p.id});
 var cin=el("input",{placeholder:"Write a comment","aria-label":"Write a comment",maxlength:"1000"});
