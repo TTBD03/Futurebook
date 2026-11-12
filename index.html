@@ -232,6 +232,8 @@ el("h3",{class:"sub"},["Change password"]),np,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 if(np.value.length<6)throw new Error("Use at least 6 characters.");
 var r=await sb.auth.updateUser({password:np.value});if(r.error)throw r.error;say("Password changed.",true)})}},["Change password"]),
+el("h3",{class:"sub"},["Blocked people"]),
+el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
 el("h3",{class:"sub"},["Profile verification"]),
 el("p",{class:"empty"},[(D.info[me.id]&&D.info[me.id].verified)?"Your profile is verified.":"Verified profiles show a ✓ next to the name. Requests are reviewed by the Futurebook team."]),
 (D.info[me.id]&&D.info[me.id].verified)?"":el("button",{class:"btn alt",onclick:function(){var why=prompt("Tell us why you’d like to be verified (optional):");if(why===null)return;
@@ -262,10 +264,15 @@ var r=await sb.from("posts").insert({user_id:me.id,body:v||" ",image_path:path})
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
 return el("div",{},[box,list])}
 
+function unblock(id){if(!confirm("Unblock "+nm(id)+"?"))return;
+act(async function(){var r=await sb.from("blocks").delete().eq("blocker",me.id).eq("blocked",id).select();
+if(r.error)throw r.error;
+if(!r.data||!r.data.length)throw new Error("Couldn’t unblock. Please try again.");
+say(nm(id)+" is unblocked. Send a new friend request if you want to reconnect.",true)})}
 function friendActions(id){
 var f=D.fs.filter(function(x){return (x.requester===me.id&&x.addressee===id)||(x.requester===id&&x.addressee===me.id)})[0];
 function del(label,ask){return el("button",{class:"btn alt",onclick:function(){if(ask&&!confirm(ask))return;act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},[label])}
-if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"])];
+if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])];
 if(!f)return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])];
 if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
