@@ -61,6 +61,20 @@ img.av{object-fit:cover}
 input[type=file]{padding:8px}
 .foot{max-width:980px;margin:0 auto;padding:8px 16px 32px;display:flex;gap:16px}
 .foot a{color:var(--mute)}
+.pcard{overflow:hidden}
+.cover{height:180px;margin:-16px -16px 14px;background:linear-gradient(135deg,var(--pri),var(--soft))}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.ver{color:var(--pri);font-weight:800;margin-left:6px}
+.handle{color:var(--mute);margin-top:-2px}
+.bio{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.about dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 18px}
+.about dt{color:var(--mute)}
+.about dd{margin:0;overflow-wrap:anywhere}
+.about a{color:var(--pri)}
+.hint{color:var(--mute);font-size:.9rem;margin:6px 0 0}
+label.f{display:block}
+label.f span{display:block;font-weight:600;margin:6px 0 4px}
+select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;font:inherit;color:inherit}
 </style>
 </head>
 <body>
@@ -83,9 +97,14 @@ function nm(id){var p=D&&D.names[id];return p||"Someone"}
 function av(id){var pic=D&&D.avatars&&D.avatars[id];if(pic)return el("img",{class:"av",src:pic,alt:""});var h=0;for(var i=0;i<id.length;i++)h=(h+id.charCodeAt(i))%COLORS.length;var e=el("div",{class:"av"},[nm(id).charAt(0).toUpperCase()]);e.style.background=COLORS[h];return e}
 async function act(fn){try{await fn()}catch(e){say(e.message||"Something went wrong. Try again.")}await refresh()}
 
+async function profilesQ(){
+var x=await sb.from("profiles").select("id,name,avatar_url,username,bio,cover_url,verified");
+if(!x.error)return x;
+return sb.from("profiles").select("id,name,avatar_url")}
+
 async function loadData(){
 var r=await Promise.all([
-sb.from("profiles").select("id,name,avatar_url"),
+profilesQ(),
 sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_at",{ascending:false}).limit(60),
 sb.from("likes").select("post_id,user_id"),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
@@ -93,7 +112,8 @@ sb.from("friendships").select("id,requester,addressee,status"),
 sb.from("blocks").select("blocked"),
 sb.from("notifications").select("id,actor,type,post_id,read,created_at").order("created_at",{ascending:false}).limit(30)]);
 for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;
-var names={},avatars={};r[0].data.forEach(function(p){names[p.id]=p.name;if(p.avatar_url)avatars[p.id]=p.avatar_url});
+var names={},avatars={},info={};r[0].data.forEach(function(p){names[p.id]=p.name;if(p.avatar_url)avatars[p.id]=p.avatar_url;
+info[p.id]={username:p.username||"",bio:p.bio||"",cover:p.cover_url||"",verified:!!p.verified}});
 var blocked=r[5].data.map(function(b){return b.blocked});
 function ok(id){return blocked.indexOf(id)<0}
 var posts=r[1].data.filter(function(p){return ok(p.user_id)});
@@ -101,7 +121,7 @@ var shown={};posts.forEach(function(p){shown[p.id]=1});
 D={names:names,posts:posts,
 likes:r[2].data.filter(function(l){return ok(l.user_id)&&shown[l.post_id]}),
 comments:r[3].data.filter(function(c){return ok(c.user_id)&&shown[c.post_id]}),
-fs:r[4].data,blocked:blocked,avatars:avatars,imgs:{},
+fs:r[4].data,blocked:blocked,avatars:avatars,info:info,imgs:{},
 notes:r[6].data.filter(function(n){return ok(n.actor)})};
 var paths=D.posts.filter(function(p){return p.image_path}).map(function(p){return p.image_path});
 if(paths.length){var su=await sb.storage.from("post-images").createSignedUrls(paths,3600);
@@ -212,6 +232,11 @@ el("h3",{class:"sub"},["Change password"]),np,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 if(np.value.length<6)throw new Error("Use at least 6 characters.");
 var r=await sb.auth.updateUser({password:np.value});if(r.error)throw r.error;say("Password changed.",true)})}},["Change password"]),
+el("h3",{class:"sub"},["Profile verification"]),
+el("p",{class:"empty"},[(D.info[me.id]&&D.info[me.id].verified)?"Your profile is verified.":"Verified profiles show a ✓ next to the name. Requests are reviewed by the Futurebook team."]),
+(D.info[me.id]&&D.info[me.id].verified)?"":el("button",{class:"btn alt",onclick:function(){var why=prompt("Tell us why you’d like to be verified (optional):");if(why===null)return;
+act(async function(){var r=await sb.from("verification_requests").insert({note:why.trim().slice(0,500)||null});
+if(r.error)throw r.error.code==="23505"?new Error("You already have a request waiting."):r.error;say("Request sent. The team will review it.",true)})}},["Request verification"]),
 el("h3",{class:"sub"},["Deactivate account"]),
 el("p",{class:"empty"},["Hides your profile and posts from everyone. Log in again any time to bring it back."]),
 el("button",{class:"btn alt",onclick:function(){if(!confirm("Deactivate your account?"))return;
@@ -222,7 +247,7 @@ el("p",{class:"empty"},["Permanently deletes your account, posts, photos, commen
 el("button",{class:"btn",onclick:function(){
 if(conf.value.trim()!=="DELETE"){say("Type DELETE in the box to confirm.");draw();return}
 act(async function(){
-var buckets=["post-images","avatars"];
+var buckets=["post-images","avatars","covers"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
@@ -246,13 +271,98 @@ if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),del("Unf
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
 return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept request"]),del("Decline",null)]}
 
+var editing=false,draft=null,X={};
+var REL=["Single","In a relationship","Engaged","Married","It's complicated","Prefer not to say"];
+function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:""}
+function isFriend(id){return D.fs.some(function(f){return f.status==="accepted"&&((f.requester===me.id&&f.addressee===id)||(f.requester===id&&f.addressee===me.id))})}
+function verMark(){return el("span",{class:"ver",role:"img",title:"Verified profile","aria-label":"Verified profile"},["✓"])}
+async function loadExtras(id){
+X[id]={loading:true};
+try{
+var d=await sb.from("profile_details").select("education,workplace,current_city,hometown,relationship_status,website").eq("user_id",id).maybeSingle();
+var c=await sb.from("profile_contact").select("contact_email,phone").eq("user_id",id).maybeSingle();
+X[id]={d:d.error?null:d.data,c:c.error?null:c.data,fail:!!d.error}
+}catch(e){X[id]={d:null,c:null,fail:true}}
+draw()}
+function coverInput(){return el("input",{type:"file",id:"coverfile",accept:"image/jpeg,image/png,image/webp","aria-label":"Choose a cover photo",style:"display:none",onchange:function(e){var f=e.target.files[0];if(!f)return;
+act(async function(){var b=await shrink(f,1600);var path=me.id+"/cover.jpg";
+var up=await sb.storage.from("covers").upload(path,b,{contentType:"image/jpeg",upsert:true});if(up.error)throw up.error;
+var url=sb.storage.from("covers").getPublicUrl(path).data.publicUrl+"?v="+Date.now();
+var r=await sb.from("profiles").update({cover_url:url}).eq("id",me.id);if(r.error)throw r.error;say("Cover photo updated.",true)})}})}
+function removeCover(){if(!confirm("Remove your cover photo?"))return;
+act(async function(){var r=await sb.from("profiles").update({cover_url:null}).eq("id",me.id);if(r.error)throw r.error;
+await sb.storage.from("covers").remove([me.id+"/cover.jpg"]);say("Cover photo removed.",true)})}
+function aboutCard(id,mine){
+var x=X[id];
+if(!x||x.loading)return el("div",{class:"card about"},[el("h3",{},["About"]),el("p",{class:"empty"},["Loading…"])]);
+if(x.fail)return el("div",{class:"card about"},[el("h3",{},["About"]),el("p",{class:"empty"},["Details aren’t available right now."])]);
+var d=x.d||{},c=x.c||{},rows=[];
+function add(k,v){if(v)rows.push([k,typeof v==="string"?document.createTextNode(v):v])}
+add("Education",d.education);add("Workplace",d.workplace);add("Lives in",d.current_city);add("From",d.hometown);add("Relationship",d.relationship_status);
+var site=safeUrl(d.website);
+if(site)add("Website",el("a",{href:site,target:"_blank",rel:"noopener noreferrer nofollow"},[site.replace(/^https?:\/\//i,"")]));
+if(mine||isFriend(id)){add("Email",c.contact_email);add("Phone",c.phone)}
+var dl=el("dl",{},[]);
+rows.forEach(function(r){dl.appendChild(el("dt",{},[r[0]]));var dd=el("dd",{},[]);dd.appendChild(r[1]);dl.appendChild(dd)});
+return el("div",{class:"card about"},[el("h3",{},["About"]),
+rows.length?dl:el("p",{class:"empty"},[mine?"Nothing here yet. Use Edit profile to add your details.":"Nothing to show yet."]),
+mine?el("p",{class:"hint"},["Your email and phone are visible to you and your friends only. Everything else here is visible to signed-in members."]):""])}
+function editForm(id){
+var u=D.info[id]||{},x=X[id]||{},d=x.d||{},c=x.c||{};
+var v=draft||{username:u.username,bio:u.bio,education:d.education||"",workplace:d.workplace||"",city:d.current_city||"",home:d.hometown||"",rel:d.relationship_status||"",site:d.website||"",email:c.contact_email||"",phone:c.phone||""};
+var F={};
+function line(label,key,max,ph,type){F[key]=el("input",{type:type||"text",value:v[key]||"",maxlength:String(max),placeholder:ph||""});return el("label",{class:"f"},[el("span",{},[label]),F[key]])}
+var bio=el("textarea",{rows:"3",maxlength:"300",placeholder:"A few words about you"},[v.bio||""]);
+var rel=el("select",{},[el("option",{value:""},["Not specified"])].concat(REL.map(function(r){return el("option",{value:r},[r])})));rel.value=v.rel||"";
+function collect(){return {username:F.username.value.trim().toLowerCase().replace(/^@/,""),bio:bio.value.trim(),education:F.education.value.trim(),workplace:F.workplace.value.trim(),city:F.city.value.trim(),home:F.home.value.trim(),rel:rel.value,site:F.site.value.trim(),email:F.email.value.trim(),phone:F.phone.value.trim()}}
+var form=[line("Username","username",20,"letters, numbers, underscores"),
+el("label",{class:"f"},[el("span",{},["Bio"]),bio]),
+line("Education","education",120,"School or university"),
+line("Workplace","workplace",120,"Where you work"),
+line("Current city","city",80),
+line("Hometown","home",80),
+el("label",{class:"f"},[el("span",{},["Relationship status"]),rel]),
+line("Website","site",200,"https://example.com"),
+line("Contact email (friends only)","email",120,"","email"),
+line("Phone (friends only)","phone",30,"","tel")];
+var save=el("button",{class:"btn",onclick:function(){act(async function(){
+var f=collect();draft=f;
+if(f.username&&!/^[a-z0-9_]{3,20}$/.test(f.username))throw new Error("Username must be 3–20 letters, numbers or underscores.");
+var site=f.site;
+if(site){if(!/^https?:\/\//i.test(site))site="https://"+site;var good=true;try{good=/^https?:$/.test(new URL(site).protocol)}catch(e){good=false}if(!good)throw new Error("That website link doesn’t look right.")}
+if(f.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email))throw new Error("That contact email doesn’t look right.");
+if(f.phone&&!/^[0-9+()\-\s.]{5,30}$/.test(f.phone))throw new Error("That phone number doesn’t look right.");
+var now=new Date().toISOString();
+var r1=await sb.from("profiles").update({username:f.username||null,bio:f.bio||null}).eq("id",me.id);
+if(r1.error)throw r1.error.code==="23505"?new Error("That username is taken."):r1.error;
+var r2=await sb.from("profile_details").upsert({user_id:me.id,education:f.education||null,workplace:f.workplace||null,current_city:f.city||null,hometown:f.home||null,relationship_status:f.rel||null,website:site||null,updated_at:now});
+if(r2.error)throw r2.error;
+var r3=await sb.from("profile_contact").upsert({user_id:me.id,contact_email:f.email||null,phone:f.phone||null,updated_at:now});
+if(r3.error)throw r3.error;
+draft=null;editing=false;X={};say("Profile saved.",true)})}},["Save"]);
+var cancel=el("button",{class:"btn alt",onclick:function(){editing=false;draft=null;draw()}},["Cancel"]);
+return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("div",{class:"row"},[save,cancel])]))}
 function profilePage(id){
 if(!D.names[id])return el("div",{class:"card"},[el("p",{class:"empty"},["This profile isn’t available."])]);
+if(!X[id])loadExtras(id);
 var mine=id===me.id,big=av(id);big.classList.add("big");
-var acts=mine?[avInput(),el("button",{class:"btn alt",onclick:function(){document.getElementById("avfile").click()}},["Change photo"])]:friendActions(id);
+var u=D.info[id]||{},ready=!(X[id]&&X[id].loading);
+var acts=mine?[avInput(),coverInput(),
+el("button",{class:"btn alt",onclick:function(){document.getElementById("avfile").click()}},["Change photo"]),
+el("button",{class:"btn alt",onclick:function(){document.getElementById("coverfile").click()}},["Change cover"])]
+.concat(u.cover?[el("button",{class:"btn alt",onclick:removeCover},["Remove cover"])]:[])
+.concat([el("button",{class:"btn",disabled:ready?null:"disabled",onclick:function(){editing=!editing;draft=null;draw()}},[editing?"Cancel":"Edit profile"])])
+:friendActions(id);
 var posts=D.posts.filter(function(p){return p.user_id===id});
 return el("div",{},[
-el("div",{class:"card profile"},[big,el("div",{},[el("h2",{},[nm(id)]),el("div",{class:"row"},acts)])]),
+el("div",{class:"card pcard"},[
+el("div",{class:"cover"},u.cover?[el("img",{src:u.cover,alt:"Cover photo of "+nm(id)})]:[]),
+el("div",{class:"profile"},[big,el("div",{},[
+el("h2",{},[nm(id)].concat(u.verified?[verMark()]:[])),
+u.username?el("div",{class:"handle"},["@"+u.username]):"",
+u.bio?el("p",{class:"bio"},[u.bio]):"",
+el("div",{class:"row",style:"margin-top:10px"},acts)])])]),
+(editing&&mine&&ready)?editForm(id):aboutCard(id,mine),
 el("h3",{class:"sub"},["Posts"]),
 el("div",{},posts.length?posts.map(post):[el("p",{class:"empty"},[mine?"You haven’t posted yet.":"No posts to show."])])])}
 
@@ -311,7 +421,7 @@ box("People you may know",others.concat(sent),"No one else has joined yet. Invit
 box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
-window.addEventListener("hashchange",function(){say("");draw();window.scrollTo(0,0)});
+window.addEventListener("hashchange",function(){say("");editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
 setInterval(async function(){
 if(!me)return;
