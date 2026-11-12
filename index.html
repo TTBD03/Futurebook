@@ -57,6 +57,8 @@ h3.sub{font-size:1rem;margin:18px 0 8px}
 .note.unread{background:var(--soft)}
 .when{display:block;color:var(--mute)}
 img.av{object-fit:cover}
+.pcap{margin:-4px 0 10px;color:var(--mute);font-size:.95rem;overflow-wrap:anywhere}
+.pcap button{background:none;border:0;color:var(--pri);padding:0 0 0 8px;font-size:.85rem}
 .pimg{width:100%;max-height:560px;object-fit:cover;border-radius:12px;margin:6px 0 10px;display:block}
 input[type=file]{padding:8px}
 .foot{max-width:980px;margin:0 auto;padding:8px 16px 32px;display:flex;gap:16px}
@@ -144,6 +146,11 @@ var x=await sb.from("likes").select("post_id,user_id,reaction");
 if(!x.error)return x;
 return sb.from("likes").select("post_id,user_id")}
 
+async function postsQ(){
+var x=await sb.from("posts").select("id,user_id,body,image_path,caption,created_at").order("created_at",{ascending:false}).limit(60);
+if(!x.error)return x;
+return sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_at",{ascending:false}).limit(60)}
+
 async function profilesQ(){
 var x=await sb.from("profiles").select("id,name,avatar_url,username,bio,cover_url,verified");
 if(!x.error)return x;
@@ -153,7 +160,7 @@ var urlCache={};
 async function loadData(){
 var r=await Promise.all([
 profilesQ(),
-sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_at",{ascending:false}).limit(60),
+postsQ(),
 likesQ(),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
 sb.from("friendships").select("id,requester,addressee,status"),
@@ -307,10 +314,17 @@ await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",locat
 function homePage(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
 var pic=el("input",{type:"file",accept:"image/jpeg,image/png,image/webp","aria-label":"Add a photo"});
-var box=el("div",{class:"card"},[ta,pic,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f)return;
+var prev=el("img",{class:"pimg",alt:"Photo preview",style:"display:none;max-height:240px;width:auto;max-width:100%"});
+var cap=el("input",{placeholder:"Add a caption to your photo (optional)","aria-label":"Photo caption",maxlength:"300",style:"display:none"});
+pic.addEventListener("change",function(){var f=pic.files&&pic.files[0];
+if(f){prev.src=URL.createObjectURL(f);prev.style.display="block";cap.style.display="block"}
+else{prev.removeAttribute("src");prev.style.display="none";cap.style.display="none";cap.value=""}});
+var box=el("div",{class:"card"},[ta,pic,prev,cap,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f)return;
 act(async function(){var path=null;
 if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error}
-var r=await sb.from("posts").insert({user_id:me.id,body:v||" ",image_path:path});if(r.error)throw r.error;say("")})}},["Post"])]);
+var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);
+var r=await sb.from("posts").insert(row);
+if(r.error){if(row.caption&&/caption/i.test(r.error.message||""))throw new Error("Captions need a one-time database update (add a 'caption' column to posts).");throw r.error}say("")})}},["Post"])]);
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
 return el("div",{},[box,list])}
 
@@ -482,6 +496,14 @@ function reactSum(likes,pid){
 var n={};likes.forEach(function(l){var k=rx(l.reaction)[0];n[k]=(n[k]||0)+1});
 var chips=REACTS.filter(function(r){return n[r[0]]}).map(function(r){return el("span",{title:r[2],"aria-label":n[r[0]]+" "+r[2]},[r[1]+" "+n[r[0]]])});
 return chips.length?el("button",{class:"rsum",type:"button","aria-label":"See who reacted",onclick:function(){openLikes=openLikes===pid?null:pid;draw()}},chips):""}
+function capEl(p){
+var own=p.user_id===me.id;if(!p.caption&&!own)return "";
+var kids=[];if(p.caption)kids.push(p.caption);
+if(own)kids.push(el("button",{type:"button",onclick:function(){var v=prompt("Photo caption",p.caption||"");if(v===null)return;v=v.trim().slice(0,300);
+act(async function(){var r=await sb.from("posts").update({caption:v||null}).eq("id",p.id).select();
+if(r.error)throw new Error(/caption/i.test(r.error.message||"")?"Captions need a one-time database update (add a 'caption' column to posts).":r.error.message);
+if(!r.data||!r.data.length)throw new Error("Couldn’t save the caption. Please try again.")})}},[p.caption?"Edit":"Add caption"]));
+return el("div",{class:"pcap"},kids)}
 function post(p){
 var likes=D.likes.filter(function(l){return l.post_id===p.id});
 var cms=D.comments.filter(function(c){return c.post_id===p.id});
@@ -501,7 +523,8 @@ if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delet
 return el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.created_at)])])]),
 p.body.trim()?el("p",{},[p.body]):"",
-p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:"Photo shared by "+nm(p.user_id),loading:"lazy"}):"",
+p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:p.caption||("Photo shared by "+nm(p.user_id)),loading:"lazy"}):"",
+p.image_path?capEl(p):"",
 el("div",{class:"acts"},acts),
 openLikes===p.id&&likes.length?likersPop(likes):"",
 el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("a",{class:"nm",href:"#profile/"+c.user_id},[nm(c.user_id)]),c.body])})),
