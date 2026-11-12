@@ -257,6 +257,7 @@ function route(){
 var h=location.hash.replace(/^#\/?/,"").split("/"),n=h[0];
 if(n==="notifications"||n==="settings")return {name:n};
 if(n==="profile")return {name:"profile",id:h[1]||me.id};
+if(n==="post"&&h[1])return {name:"post",id:h[1]};
 return {name:"home"}}
 function nav(href,label,id,cur){return el("a",{href:href,class:"nav"+(cur?" cur":""),id:id||null,"aria-current":cur?"page":null},[label])}
 function header(){
@@ -442,6 +443,7 @@ var r=route(),body;
 if(r.name==="notifications")body=notesPage();
 else if(r.name==="settings")body=settingsPage();
 else if(r.name==="profile")body=profilePage(r.id);
+else if(r.name==="post")body=postPage(r.id);
 else body=homePage();
 return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
@@ -496,6 +498,17 @@ function reactSum(likes,pid){
 var n={};likes.forEach(function(l){var k=rx(l.reaction)[0];n[k]=(n[k]||0)+1});
 var chips=REACTS.filter(function(r){return n[r[0]]}).map(function(r){return el("span",{title:r[2],"aria-label":n[r[0]]+" "+r[2]},[r[1]+" "+n[r[0]]])});
 return chips.length?el("button",{class:"rsum",type:"button","aria-label":"See who reacted",onclick:function(){openLikes=openLikes===pid?null:pid;draw()}},chips):""}
+function postPage(id){
+var p=D.posts.filter(function(x){return x.id===id})[0];
+var back=el("a",{href:"#home",class:"link"},["\u2190 Back to feed"]);
+if(!p)return el("div",{},[back,el("div",{class:"card"},[el("p",{class:"empty"},["This post isn\u2019t available. It may have been deleted, or you may not be able to see it."])])]);
+return el("div",{},[back,post(p)])}
+async function sharePost(p){
+var url=location.href.split("#")[0]+"#post/"+p.id;
+var text=(p.body.trim()||p.caption||"").slice(0,100);
+if(navigator.share){try{await navigator.share({title:"Post by "+nm(p.user_id)+" on Futurebook",text:text,url:url})}catch(e){}return}
+try{await navigator.clipboard.writeText(url);say("Link copied. Anyone logged in who can see this post can open it.",true);draw()}
+catch(e){prompt("Copy this link:",url)}}
 function capEl(p){
 var own=p.user_id===me.id;if(!p.caption&&!own)return "";
 var kids=[];if(p.caption)kids.push(p.caption);
@@ -511,7 +524,8 @@ var cin=el("input",{placeholder:"Write a comment","aria-label":"Write a comment"
 cin.addEventListener("keydown",function(e){if(e.key==="Enter"&&cin.value.trim()){var v=cin.value.trim();
 act(async function(){var r=await sb.from("comments").insert({post_id:p.id,user_id:me.id,body:v});if(r.error)throw r.error})}});
 var acts=[reactBar(p,likes),reactSum(likes,p.id),
-el("span",{class:"empty"},[cms.length+(cms.length===1?" comment":" comments")])];
+el("span",{class:"empty"},[cms.length+(cms.length===1?" comment":" comments")]),
+el("button",{type:"button","aria-label":"Share this post",onclick:function(){sharePost(p)}},["Share"])];
 if(p.user_id!==me.id){
 acts.push(el("button",{onclick:function(){var why=prompt("Why are you reporting this post?");if(!why||!why.trim())return;
 act(async function(){var r=await sb.from("reports").insert({reporter:me.id,post_id:p.id,reported_user:p.user_id,reason:why.trim().slice(0,500)});if(r.error)throw r.error;say("Thanks. Your report was sent.",true)})}},["Report"]));
