@@ -118,7 +118,7 @@ el("p",{style:"font-size:.9rem"},["By creating an account you agree to our ",el(
 
 function shrink(file,max){return new Promise(function(res,rej){var img=new Image(),u=URL.createObjectURL(file);
 img.onload=function(){var k=Math.min(1,max/Math.max(img.width,img.height));var c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
-c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(function(b){b?res(b):rej(new Error("Couldn’t read that image."))},"image/jpeg",0.82)};
+var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(function(b){b?res(b):rej(new Error("Couldn’t read that image."))},"image/jpeg",0.82)};
 img.onerror=function(){rej(new Error("That file isn’t a supported image. Use a JPG, PNG or WebP."))};img.src=u})}
 function avInput(){return el("input",{type:"file",id:"avfile",accept:"image/jpeg,image/png,image/webp","aria-label":"Choose a profile photo",style:"display:none",onchange:function(e){var f=e.target.files[0];if(!f)return;
 act(async function(){var b=await shrink(f,320);var path=me.id+"/avatar.jpg";
