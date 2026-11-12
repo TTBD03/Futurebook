@@ -57,6 +57,9 @@ h3.sub{font-size:1rem;margin:18px 0 8px}
 .note.unread{background:var(--soft)}
 .when{display:block;color:var(--mute)}
 img.av{object-fit:cover}
+.ptabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:4px 0 12px}
+.ptabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font-weight:600;color:var(--mute)}
+.ptabs button[aria-selected=true]{color:var(--pri);border-bottom-color:var(--pri)}
 .pcap{margin:-4px 0 10px;color:var(--mute);font-size:.95rem;overflow-wrap:anywhere}
 .pcap button{background:none;border:0;color:var(--pri);padding:0 0 0 8px;font-size:.85rem}
 .pimg{width:100%;max-height:560px;object-fit:cover;border-radius:12px;margin:6px 0 10px;display:block}
@@ -415,6 +418,23 @@ if(r3.error)throw r3.error;
 draft=null;editing=false;X={};say("Profile saved.",true)})}},["Save"]);
 var cancel=el("button",{class:"btn alt",onclick:function(){editing=false;draft=null;draw()}},["Cancel"]);
 return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("div",{class:"row"},[save,cancel])]))}
+function friendsOf(id){
+var seen={};
+D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===id?f.addressee:(f.addressee===id?f.requester:null);
+if(o&&D.names[o]&&D.blocked.indexOf(o)<0)seen[o]=f});
+return Object.keys(seen).map(function(o){return {id:o,f:seen[o]}})}
+function profileTabs(id,n){
+function tab(key,label){return el("button",{type:"button",role:"tab","aria-selected":String(ptab===key),onclick:function(){ptab=key;draw()}},[label])}
+return el("div",{class:"ptabs",role:"tablist"},[tab("posts","Posts"),tab("friends","Friends ("+n+")")])}
+function friendsTab(id,mine){
+var list=friendsOf(id).sort(function(a,b){return nm(a.id).localeCompare(nm(b.id))});
+if(!list.length)return el("p",{class:"empty"},[mine?"You haven\u2019t added any friends yet. Find people in the sidebar and send a request.":"No friends to show."]);
+return el("div",{class:"card"},list.map(function(x){
+var u=D.info[x.id]||{};
+var kids=[av(x.id),el("span",{},[el("a",{class:"nm",href:"#profile/"+x.id},[nm(x.id)]),u.username?el("small",{class:"when"},["@"+u.username]):""])];
+if(mine)kids.push(el("button",{class:"btn alt",style:"margin-left:auto",onclick:function(){if(!confirm("Remove "+nm(x.id)+" from your friends?"))return;
+act(async function(){var r=await sb.from("friendships").delete().eq("id",x.f.id);if(r.error)throw r.error})}},["Unfriend"]));
+return el("div",{class:"row",style:"margin-bottom:8px"},kids)}))}
 function profilePage(id){
 if(!D.names[id])return el("div",{class:"card"},[el("p",{class:"empty"},["This profile isn’t available."])]);
 if(!X[id])loadExtras(id);
@@ -436,7 +456,8 @@ u.username?el("div",{class:"handle"},["@"+u.username]):"",
 u.bio?el("p",{class:"bio"},[u.bio]):"",
 el("div",{class:"row",style:"margin-top:10px"},acts)])])]),
 (editing&&mine&&ready)?editForm(id):aboutCard(id,mine),
-el("h3",{class:"sub"},["Posts"]),
+profileTabs(id,friendsOf(id).length),
+ptab==="friends"?friendsTab(id,mine):
 el("div",{},posts.length?posts.map(post):[el("p",{class:"empty"},[mine?"You haven’t posted yet.":"No posts to show."])])])}
 
 function feed(){
@@ -450,7 +471,7 @@ return el("div",{},[header(),
 el("div",{class:"wrap"},[el("main",{},[msgEl(),body]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"])])])}
 
-var REACTS=[["like","👍","Like"],["love","❤️","Love"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null,openLikes=null,shareFor=null;
+var REACTS=[["like","👍","Like"],["love","❤️","Love"],["haha","😂","Haha"],["sad","😢","Sad"],["wow","😮","Wow"],["angry","😡","Angry"],["confused","😕","Confused"]],burst=null,openLikes=null,shareFor=null,ptab="posts";
 function rx(k){for(var i=0;i<REACTS.length;i++)if(REACTS[i][0]===k)return REACTS[i];return REACTS[0]}
 function calm(){return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)}
 function react(p,key){
@@ -590,7 +611,7 @@ box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 if(document.addEventListener&&document.querySelectorAll)document.addEventListener("click",function(e){
 var o=document.querySelectorAll(".react.open");for(var i=0;i<o.length;i++)if(!o[i].contains(e.target))o[i].classList.remove("open")});
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
-window.addEventListener("hashchange",function(){say("");editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
+window.addEventListener("hashchange",function(){say("");ptab="posts";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
 setInterval(async function(){
 if(!me)return;
