@@ -172,7 +172,7 @@ if(!x.error)return x;
 return sb.from("likes").select("post_id,user_id")}
 
 async function postsQ(){
-var sets=["id,user_id,body,image_path,caption,visibility,shared_from_user,created_at","id,user_id,body,image_path,caption,created_at","id,user_id,body,image_path,created_at"],x;
+var sets=["id,user_id,body,image_path,caption,visibility,shared_from_user,location_name,created_at","id,user_id,body,image_path,caption,visibility,shared_from_user,created_at","id,user_id,body,image_path,caption,created_at","id,user_id,body,image_path,created_at"],x;
 for(var i=0;i<sets.length;i++){x=await sb.from("posts").select(sets[i]).order("created_at",{ascending:false}).limit(60);if(!x.error)return x}
 return x}
 
@@ -340,6 +340,14 @@ for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(m
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
 await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])])}
+async function placeName(lat,lon){
+var r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&lat="+lat+"&lon="+lon,{headers:{"Accept-Language":navigator.language||"en"}});
+if(!r.ok)throw new Error("lookup");
+var j=await r.json(),a=j.address||{};
+var parts=[a.amenity||a.tourism||a.leisure||a.building&&j.name||j.name,a.neighbourhood||a.suburb||a.city_district||a.village,a.city||a.town||a.municipality||a.county||a.state,a.country].filter(Boolean);
+var seen={};parts=parts.filter(function(x){if(seen[x])return false;seen[x]=1;return true});
+if(!parts.length)throw new Error("none");
+return parts.slice(0,3).join(", ")}
 function homePage(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
 var pic=el("input",{type:"file",accept:"image/jpeg,image/png,image/webp","aria-label":"Add a photo"});
@@ -349,10 +357,20 @@ pic.addEventListener("change",function(){var f=pic.files&&pic.files[0];
 if(f){prev.src=URL.createObjectURL(f);prev.style.display="block";cap.style.display="block"}
 else{prev.removeAttribute("src");prev.style.display="none";cap.style.display="none";cap.value=""}});
 var aud=el("select",{"aria-label":"Who can see this post"},[el("option",{value:"friends"},["\ud83d\udc65 Friends"]),el("option",{value:"public"},["\ud83c\udf10 Public"])]);
-var box=el("div",{class:"card"},[ta,pic,cap,prev,aud,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f)return;
+var loc=el("input",{placeholder:"Where are you? Type a place name","aria-label":"Check-in location",maxlength:"120",style:"display:none"});
+var gps=el("button",{class:"btn alt",type:"button",style:"display:none"},["Use my current location"]);
+gps.addEventListener("click",function(){
+function done(t){gps.textContent=t;gps.disabled=false;setTimeout(function(){gps.textContent="Use my current location"},3500)}
+if(!navigator.geolocation){done("Location isn\u2019t supported here");return}
+gps.disabled=true;gps.textContent="Locating\u2026";
+navigator.geolocation.getCurrentPosition(function(pos){
+placeName(pos.coords.latitude,pos.coords.longitude).then(function(n){loc.value=n.slice(0,120);gps.textContent="Use my current location";gps.disabled=false}).catch(function(){done("Couldn\u2019t find the place. Type it instead.")})},
+function(){done("Location blocked. Type a place instead.")},{timeout:10000,maximumAge:60000})});
+var lt=el("button",{class:"btn alt",type:"button",onclick:function(){var on=loc.style.display==="none";loc.style.display=on?"block":"none";gps.style.display=on?"inline-block":"none";if(on)loc.focus();else loc.value=""}},["\ud83d\udccd Check in"]);
+var box=el("div",{class:"card"},[ta,pic,cap,prev,el("div",{class:"row",style:"margin-bottom:8px"},[lt,gps]),loc,aud,el("button",{class:"btn",onclick:function(){var v=ta.value.trim(),f=pic.files&&pic.files[0];if(!v&&!f&&!loc.value.trim())return;
 act(async function(){var path=null;
 if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error}
-var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);if(aud.value==="public")row.visibility="public";
+var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);if(aud.value==="public")row.visibility="public";var lv=loc.value.trim();if(lv)row.location_name=lv.slice(0,120);
 var r=await sb.from("posts").insert(row);
 if(r.error)throw dbErr(r.error);say("")})}},["Post"])]);
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
@@ -763,7 +781,7 @@ var text=(p.body.trim()||p.caption||"").slice(0,100);
 if(navigator.share){try{await navigator.share({title:"Post by "+nm(p.user_id)+" on Futurebook",text:text,url:url})}catch(e){}return}
 try{await navigator.clipboard.writeText(url);say("Link copied. Anyone logged in who can see this post can open it.",true);draw()}
 catch(e){prompt("Copy this link:",url)}}
-function dbErr(e){var m=(e&&e.message)||"";if(/caption|visibility|shared_from_user/i.test(m))return new Error("This needs a one-time database update. Run the latest SQL from the chat, then try again.");return e}
+function dbErr(e){var m=(e&&e.message)||"";if(/caption|visibility|shared_from_user|location_name/i.test(m))return new Error("This needs a one-time database update. Run the latest SQL from the chat, then try again.");return e}
 function capEl(p){
 var own=p.user_id===me.id;if(!p.caption&&!own)return "";
 var kids=[];if(p.caption)kids.push(p.caption);
@@ -792,6 +810,7 @@ if(p.user_id===me.id)acts.push(el("button",{onclick:function(){if(confirm("Delet
 return el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
 p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nm(p.shared_from_user)])]):"",
+p.location_name?el("p",{class:"empty",style:"margin:0 0 6px"},["\ud83d\udccd ",el("a",{href:"https://www.openstreetmap.org/search?query="+encodeURIComponent(p.location_name),target:"_blank",rel:"noopener noreferrer"},[p.location_name])]):"",
 p.body.trim()?el("p",{},[p.body]):"",
 p.image_path?capEl(p):"",
 p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_path],alt:p.caption||("Photo shared by "+nm(p.user_id)),loading:"lazy"}):"",
