@@ -167,6 +167,49 @@ button.rsum:hover{text-decoration:underline}
 .rpick button:hover::before,.rpick button:focus-visible::before{opacity:1;transform:translateX(-50%) scale(1)}
 .rsum span{display:inline-flex;align-items:center;gap:4px}
 .rpick{padding:8px 10px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+/* mobile polish */
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{overflow-x:clip;overscroll-behavior-y:none}
+button,a,select,summary,.nav{touch-action:manipulation}
+button{-webkit-appearance:none;appearance:none;transition:transform .12s ease,background-color .15s ease,opacity .15s ease}
+button:active{transform:scale(.97)}
+img,video{max-width:100%}
+.post>.row:first-child{flex-wrap:nowrap;align-items:flex-start}
+.post .meta{min-width:0;flex:1;overflow-wrap:anywhere}
+header.top{padding-top:calc(10px + env(safe-area-inset-top,0px));-webkit-backdrop-filter:saturate(1.4) blur(10px);backdrop-filter:saturate(1.4) blur(10px)}
+@media(max-width:760px){
+header.top{flex-direction:column;align-items:stretch;gap:2px;padding:calc(8px + env(safe-area-inset-top,0px)) 0 6px}
+header.top .logo{padding:0 14px;font-size:1.45rem}
+header.top nav{flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:2px 10px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch;-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent);mask-image:linear-gradient(90deg,#000 92%,transparent)}
+header.top nav::-webkit-scrollbar{display:none}
+header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height:40px;display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;scroll-snap-align:start}
+.wrap{grid-template-columns:minmax(0,1fr);gap:12px;padding:10px 10px calc(24px + env(safe-area-inset-bottom,0px))}
+.card{padding:14px;border-radius:16px;margin-bottom:12px}
+.cover{height:120px;margin:-14px -14px 12px}
+.profile{gap:12px}.av.big{width:72px;height:72px;font-size:1.7rem}
+.acts{gap:6px;flex-wrap:wrap}
+.acts button,.rbtn{min-height:40px;padding:6px 10px;border-radius:10px}
+.acts button:active,.rbtn:active{background:var(--soft)}
+.ptabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.ptabs::-webkit-scrollbar{display:none}
+.ptabs button{white-space:nowrap;flex:none}
+.grid img{height:150px}.pimg{max-height:420px}
+.mimg,.mvid{max-width:100%}.mb{max-width:88%}
+.mlist{max-height:calc(100dvh - 330px);min-height:220px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.mcomp input{min-width:0}
+.rpick{max-width:calc(100vw - 24px)}
+.rpick button .ri svg{width:32px;height:32px}
+.rpick button::before{display:none}
+.pmenu>button{min-width:40px;min-height:40px}
+.pm-pop button,.pm-pop select{min-height:44px}
+.pm-pop{min-width:min(220px,calc(100vw - 40px))}
+.btn{min-height:44px}
+.btn.alt{padding:8px 12px;font-size:.92rem;min-height:40px}
+.foot{padding:8px 14px calc(28px + env(safe-area-inset-bottom,0px))}.foot .cp{margin-left:0;width:100%}
+.about dl{grid-template-columns:1fr;gap:2px 0}.about dd{margin-bottom:8px}
+.bgp{padding:36px 16px;font-size:1.3rem}
+}
+@media(max-width:380px){.card{padding:12px}.av{width:36px;height:36px}header.top .logo{font-size:1.3rem}}
 </style>
 </head>
 <body>
