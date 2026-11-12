@@ -889,7 +889,7 @@ var menu=acts.splice(4),menuEl="";
 if(menu.length){menu.forEach(function(x){if(x.tagName==="BUTTON")x.className="pmi"});
 var pop=el("div",{class:"pm-pop",role:"menu"},menu);
 pop.addEventListener("click",function(){setTimeout(function(){openMenu=null},0)});
-menuEl=el("div",{class:"pmenu"},[el("button",{type:"button","aria-label":"Post options","aria-haspopup":"menu","aria-expanded":openMenu===p.id?"true":"false",onclick:function(){openMenu=openMenu===p.id?null:p.id;draw()}},["\u22ef"])].concat(openMenu===p.id?[pop]:[]))}
+menuEl=el("div",{class:"pmenu",onmouseleave:function(){clearTimeout(window.__pmT);window.__pmT=setTimeout(closeMenu,350)},onmouseenter:function(){clearTimeout(window.__pmT)}},[el("button",{type:"button","aria-label":"Post options","aria-haspopup":"menu","aria-expanded":openMenu===p.id?"true":"false",onclick:function(){openMenu=openMenu===p.id?null:p.id;draw()}},["\u22ef"])].concat(openMenu===p.id?[pop]:[]))}
 var art=el("article",{class:"card post"},[
 el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.scheduled_at&&new Date(p.scheduled_at).getTime()<=Date.now()?p.scheduled_at:p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
 p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nm(p.shared_from_user)])]):"",
@@ -923,8 +923,11 @@ box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
 if(document.addEventListener&&document.querySelectorAll)document.addEventListener("click",function(e){
 var o=document.querySelectorAll(".react.open");for(var i=0;i<o.length;i++)if(!o[i].contains(e.target))o[i].classList.remove("open")});
-document.addEventListener("click",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu"))){openMenu=null;draw()}});
-document.addEventListener("keydown",function(e){if(e.key==="Escape"&&openMenu){openMenu=null;draw()}});
+function closeMenu(){if(!openMenu)return;openMenu=null;var p=document.querySelectorAll(".pm-pop");for(var i=0;i<p.length;i++)p[i].parentNode.removeChild(p[i]);var b=document.querySelectorAll(".pmenu>button");for(var j=0;j<b.length;j++)b[j].setAttribute("aria-expanded","false")}
+document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu()});
+window.addEventListener("scroll",closeMenu,{passive:true});
+document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
 sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";editing=false;draft=null;X={};draw();window.scrollTo(0,0)});
 refresh();
