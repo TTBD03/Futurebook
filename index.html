@@ -42,6 +42,9 @@ header.top{position:sticky;top:0;background:var(--card);border-bottom:1px solid 
 .side h3{font-size:1.05rem;margin-bottom:10px}
 .side .row{margin-bottom:10px}
 .empty{color:var(--mute);margin:0}
+.note{padding:6px 8px;border-radius:10px;margin-bottom:6px}
+.note.unread{background:var(--soft)}
+.when{display:block;color:var(--mute)}
 img.av{object-fit:cover}
 .pimg{width:100%;max-height:560px;object-fit:cover;border-radius:12px;margin:6px 0 10px;display:block}
 input[type=file]{padding:8px}
@@ -59,7 +62,7 @@ var SUPABASE_KEY="sb_publishable_iB2bMJMLJuP5gE4pAdDvyg_Lo2jptUN";
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 var COLORS=["#3030e8","#e8453c","#0f9d73","#c2410c","#7c3aed","#0e7490"];
 var root=document.getElementById("app");
-var me=null,D=null,mode="up",notice={text:"",ok:false};
+var me=null,D=null,showNotes=false,mode="up",notice={text:"",ok:false};
 
 function el(tag,attrs,kids){var e=document.createElement(tag);for(var k in attrs||{}){if(k==="class")e.className=attrs[k];else if(k.slice(0,2)==="on")e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!==null)e.setAttribute(k,attrs[k])}
 (kids||[]).forEach(function(c){e.appendChild(typeof c==="string"?document.createTextNode(c):c)});return e}
@@ -76,10 +79,11 @@ sb.from("posts").select("id,user_id,body,image_path,created_at").order("created_
 sb.from("likes").select("post_id,user_id"),
 sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
 sb.from("friendships").select("id,requester,addressee,status"),
-sb.from("blocks").select("blocked")]);
+sb.from("blocks").select("blocked"),
+sb.from("notifications").select("id,actor,type,post_id,read,created_at").order("created_at",{ascending:false}).limit(30)]);
 for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;
 var names={},avatars={};r[0].data.forEach(function(p){names[p.id]=p.name;if(p.avatar_url)avatars[p.id]=p.avatar_url});
-D={names:names,posts:r[1].data,likes:r[2].data,comments:r[3].data,fs:r[4].data,blocked:r[5].data.map(function(b){return b.blocked}),avatars:avatars,imgs:{}};
+D={names:names,posts:r[1].data,likes:r[2].data,comments:r[3].data,fs:r[4].data,blocked:r[5].data.map(function(b){return b.blocked}),avatars:avatars,imgs:{},notes:r[6].data};
 var paths=D.posts.filter(function(p){return p.image_path}).map(function(p){return p.image_path});
 if(paths.length){var su=await sb.storage.from("post-images").createSignedUrls(paths,3600);
 if(!su.error)su.data.forEach(function(x){if(x.signedUrl)D.imgs[x.path]=x.signedUrl})}}
@@ -125,6 +129,18 @@ act(async function(){var b=await shrink(f,320);var path=me.id+"/avatar.jpg";
 var up=await sb.storage.from("avatars").upload(path,b,{contentType:"image/jpeg",upsert:true});if(up.error)throw up.error;
 var url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl+"?v="+Date.now();
 var r=await sb.from("profiles").update({avatar_url:url}).eq("id",me.id);if(r.error)throw r.error;say("Profile photo updated.",true)})}})}
+function unread(){return D.notes.filter(function(n){return !n.read}).length}
+function toggleNotes(){
+if(!showNotes){showNotes=true;draw();return}
+showNotes=false;
+if(unread()>0)act(async function(){var r=await sb.from("notifications").update({read:true}).eq("read",false);if(r.error)throw r.error});else draw()}
+function notesPanel(){
+if(!showNotes)return "";
+var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"liked your post.",comment:"commented on your post."};
+var items=D.notes.map(function(n){
+return el("div",{class:"row note"+(n.read?"":" unread")},[av(n.actor),
+el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])});
+return el("div",{class:"card"},[el("h3",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
 function feed(){
 var ta=el("textarea",{rows:"3",placeholder:"What’s on your mind, "+nm(me.id).split(" ")[0]+"?","aria-label":"New post",maxlength:"2000"});
 var pic=el("input",{type:"file",accept:"image/jpeg,image/png,image/webp","aria-label":"Add a photo"});
@@ -135,9 +151,10 @@ var r=await sb.from("posts").insert({user_id:me.id,body:v||" ",image_path:path})
 var list=el("div",{},D.posts.length?D.posts.map(post):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
 return el("div",{},[
 el("header",{class:"top"},[el("div",{class:"logo"},["Futurebook"]),el("div",{class:"row"},[av(me.id),el("b",{},[nm(me.id)]),avInput(),el("button",{class:"link",onclick:function(){document.getElementById("avfile").click()}},["Change photo"]),
+el("button",{class:"link",id:"bell",onclick:toggleNotes},["Notifications"+(unread()?" ("+unread()+")":"")]),
 el("button",{class:"link",onclick:function(){refresh()}},["Refresh"]),
 el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");await refresh()}},["Log out"])])]),
-el("div",{class:"wrap"},[el("main",{},[el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text]),box,list]),side()]),
+el("div",{class:"wrap"},[el("main",{},[el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text]),notesPanel(),box,list]),side()]),
 el("footer",{class:"foot"},[el("a",{href:"privacy.html"},["Privacy"]),el("a",{href:"terms.html"},["Terms"])])])}
 
 function post(p){
@@ -186,6 +203,11 @@ box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
 sb.auth.onAuthStateChange(function(ev){if(ev==="SIGNED_OUT"){me=null;D=null;draw()}});
 refresh();
+setInterval(async function(){
+if(!me)return;
+var r=await sb.from("notifications").select("id",{count:"exact",head:true}).eq("read",false);
+var b=document.getElementById("bell");
+if(b&&!r.error)b.textContent="Notifications"+(r.count?" ("+r.count+")":"")},30000);
 })();
 </script>
 </body>
