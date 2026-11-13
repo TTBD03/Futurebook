@@ -210,6 +210,8 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 .bgp{padding:36px 16px;font-size:1.3rem}
 }
 @media(max-width:380px){.card{padding:12px}.av{width:36px;height:36px}header.top .logo{font-size:1.3rem}}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:min(92vw,420px);background:var(--card);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px 16px;border-radius:12px;text-decoration:none;font-weight:600;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1;pointer-events:auto}
 </style>
 </head>
 <body>
@@ -288,7 +290,7 @@ me=s?s.user:null;needMfa=false;
 if(me){try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}}
 if(me&&!needMfa){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}
 try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}}
-draw();if(me&&!needMfa)pollUnread()}
+draw();if(me&&!needMfa)checkMsgs()}
 
 var KEEP={};
 function draw(){var y=window.scrollY;
@@ -401,14 +403,24 @@ el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=nul
 function notesPage(){
 var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"reacted to your post.",comment:"commented on your post."};
 var fresh=D.notes.filter(function(n){return !n.read}).map(function(n){return n.id});
-var items=D.notes.map(function(n){
+var items=[];
+if(mUnread>0)items.push(el("a",{href:"#messages",class:"row note unread"},[el("span",{},[el("b",{},[mUnread+(mUnread===1?" unread message":" unread messages")]),el("small",{class:"when"},["Open Messages"])])]));
+items=items.concat(D.notes.map(function(n){
 var href=(n.type==="friend_request"||n.type==="friend_accept")?"#profile/"+n.actor:(n.post_id?"#post/"+n.post_id:"#home");
 return el("a",{href:href,class:"row note"+(fresh.indexOf(n.id)>-1?" unread":"")},[av(n.actor),
-el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])});
+el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])}));
 if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).then(function(r){
 if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
-return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
+return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes, comments and messages will show up here."])]))}
 var stab="account";
+function alertBlock(){
+var out=[el("h3",{class:"sub"},["Message alerts"]),el("p",{class:"empty"},["New messages show a pop-up and a count in the tab title while Futurebook is open."])];
+if(!window.Notification){out.push(el("p",{class:"empty"},["Your browser doesn’t support desktop alerts."]));return out}
+var pm=Notification.permission;
+if(pm==="granted")out.push(el("p",{class:"empty"},["Desktop alerts are on. They appear when Futurebook is open in another tab."]));
+else if(pm==="denied")out.push(el("p",{class:"empty"},["Desktop alerts are blocked. Allow notifications for this site in your browser settings to use them."]));
+else out.push(el("button",{class:"btn alt",onclick:function(){Notification.requestPermission().then(function(){say(Notification.permission==="granted"?"Desktop alerts are on.":"",Notification.permission==="granted");draw()})}},["Turn on desktop alerts"]));
+return out}
 function mfaBlock(){
 if(mfaF.length){return [el("p",{class:"empty"},["Two-factor authentication is ON. You’ll need a code from your authenticator app each time you log in."]),
 el("button",{class:"btn alt",onclick:function(){if(!confirm("Turn off two-factor authentication? Your account will be less protected."))return;
@@ -453,7 +465,7 @@ var r=await sb.from("profiles").update({name:v}).eq("id",me.id).select();
 if(r.error)throw r.error;
 if(!r.data||!r.data.length)throw new Error("Couldn\u2019t save your name. Try again.");
 try{await sb.auth.updateUser({data:{name:v}})}catch(e){}
-say("Name updated.",true)})}},["Change name"]),
+say("Name updated.",true)})}},["Change name"])].concat(alertBlock()).concat([
 el("h3",{class:"sub"},["Profile verification"]),
 el("p",{class:"empty"},[(D.info[me.id]&&D.info[me.id].verified)?"Your profile is verified.":"Verified profiles show a ✓ next to the name. Requests are reviewed by the Futurebook team."]),
 (D.info[me.id]&&D.info[me.id].verified)?"":el("button",{class:"btn alt",onclick:function(){var why=prompt("Tell us why you’d like to be verified (optional):");if(why===null)return;
@@ -473,7 +485,7 @@ var buckets=["post-images","avatars","covers","message-media"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
 var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
-await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])];
+await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])]);
 var sec=[
 el("h3",{class:"sub"},["Change password"]),np,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
@@ -674,7 +686,30 @@ draft=null;editing=false;X={};say("Profile saved.",true)})}},["Save"]);
 var cancel=el("button",{class:"btn alt",onclick:function(){editing=false;draft=null;draw()}},["Cancel"]);
 return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("div",{class:"row"},[save,cancel])]))}
 var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnread=0;
-function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"")}
+function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"");document.title=(mUnread&&me?"("+mUnread+") ":"")+"Futurebook"}
+var seenM=null;
+function toast(txt,href){var t=document.getElementById("toast");if(!t){t=document.createElement("a");t.id="toast";t.setAttribute("role","status");document.body.appendChild(t)}
+t.textContent=txt;t.href=href;t.className="show";clearTimeout(toast.t);toast.t=setTimeout(function(){t.className=""},6000)}
+async function checkMsgs(){
+if(!me||needMfa)return;
+try{
+var r=await sb.from("messages").select("id,sender,body,media_type,media_name,created_at",{count:"exact"}).eq("recipient",me.id).eq("read",false).order("created_at",{ascending:false}).limit(30);
+if(r.error)return;
+var rows=(r.data||[]).filter(function(m){return !(D&&D.blocked&&D.blocked.indexOf(m.sender)>-1)});
+mUnread=rows.length>=30?(r.count||rows.length):rows.length;
+var fresh=seenM===null?[]:rows.filter(function(m){return !seenM[m.id]});
+if(seenM===null)seenM={};
+rows.forEach(function(m){seenM[m.id]=1});
+paintBell();
+if(!fresh.length)return;
+var rt=route(),viewing=rt.name==="messages"&&!document.hidden;
+if(viewing)return;
+var m0=fresh[0],who=D?nm(m0.sender):"Someone";
+var text=fresh.length>1?fresh.length+" new messages":who+": "+msgSnippet({sender:m0.sender,body:m0.body||"",media_type:m0.media_type,media_name:m0.media_name});
+var href="#messages"+(fresh.length>1?"":"/"+m0.sender);
+if(!document.hidden)toast(text,href);
+else if(window.Notification&&Notification.permission==="granted"){try{var nt=new Notification(fresh.length>1?"Futurebook":who,{body:fresh.length>1?text:msgSnippet({sender:m0.sender,body:m0.body||"",media_type:m0.media_type,media_name:m0.media_name}),tag:"fb-msg"});nt.onclick=function(){window.focus();location.hash=href;nt.close()}}catch(e){}}
+}catch(e){}}
 async function pollUnread(){if(!me)return;try{var r=await sb.from("messages").select("id",{count:"exact",head:true}).eq("recipient",me.id).eq("read",false);
 if(!r.error){mUnread=r.count||0;paintBell()}}catch(e){}}
 async function loadMsgs(){
@@ -1081,9 +1116,10 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu()});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;document.title="Futurebook";KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
+setInterval(checkMsgs,15000);
 setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
 if(!me||needMfa)return;
