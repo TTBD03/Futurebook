@@ -328,6 +328,13 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 .cpx .btn:hover{background:var(--soft)}
 @media(max-width:760px){.chatcard{height:calc(100dvh - 175px);border-radius:18px}.mrow{max-width:90%}.mtray{left:8px;right:8px}}
 @media (prefers-reduced-motion:reduce){.mrow.in,.cp,.cp .brow.pin,.mwave,.chatcard .mstage,.mrec>span:first-child{animation:none!important}.mtray,.msend,.mplus,.cback{transition:none!important}}
+.avw{position:relative;display:inline-flex;flex:none}
+.odot{display:none;position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:#22c55e;border:2px solid var(--card)}
+.odot.on{display:block}
+.avw .av.sm+.odot{width:10px;height:10px}
+.onl-tg{display:flex;align-items:center;gap:8px;margin:0 0 10px;color:var(--mute);font-weight:600}
+.onl-tg input{width:auto;margin:0}
+.onl-n{color:#16a34a;font-weight:600;font-size:.85rem}
 </style>
 </head>
 <body>
@@ -406,7 +413,7 @@ me=s?s.user:null;needMfa=false;
 if(me){try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}}
 if(me&&!needMfa){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}
 try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}}
-draw();if(me&&!needMfa){checkMsgs();liveMsgs()}}
+draw();if(me&&!needMfa){checkMsgs();liveMsgs();presOn()}}
 
 var KEEP={};
 function draw(){var y=window.scrollY;
@@ -572,6 +579,9 @@ var conf=el("input",{placeholder:"Type DELETE to confirm","aria-label":"Type DEL
 function tab(key,label){return el("button",{type:"button",role:"tab","aria-selected":String(stab===key),onclick:function(){stab=key;say("");draw()}},[label])}
 var tabs=el("div",{class:"ptabs",role:"tablist"},[tab("account","Account"),tab("security","Security"),tab("privacy","Privacy")]);
 var acct=[el("p",{class:"empty"},["Signed in as "+me.email]),
+el("h3",{class:"sub"},["Message sound"]),
+el("p",{class:"empty"},["Play a short chime when a new message arrives."]),
+el("button",{class:"btn alt",onclick:function(){var v=!pref("sound",true);setPref("sound",v);if(v)ding(true);draw()}},[pref("sound",true)?"Sound is on \u2013 turn off":"Sound is off \u2013 turn on"]),
 el("h3",{class:"sub"},["Name"]),nn,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 var v=nn.value.trim().replace(/\s+/g," ");
@@ -612,6 +622,9 @@ el("h3",{class:"sub"},["Devices"]),
 el("p",{class:"empty"},["Signed in somewhere you don\u2019t use anymore? This logs you out everywhere except this device."]),
 el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.auth.signOut({scope:"others"});if(r.error)throw r.error;say("Logged out of all other devices.",true)})}},["Log out other devices"])]);
 var priv=[
+el("h3",{class:"sub"},["Online status"]),
+el("p",{class:"empty"},["Let your friends see when you\u2019re online (a green dot next to your name)."]),
+el("button",{class:"btn alt",onclick:function(){setShowOnline(!pref("showon",true));draw()}},[pref("showon",true)?"Showing as online \u2013 turn off":"Hidden \u2013 show me as online"]),
 el("h3",{class:"sub"},["Blocked people"]),
 el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
 el("h3",{class:"sub"},["Who can see your details"]),
@@ -803,6 +816,42 @@ var cancel=el("button",{class:"btn alt",onclick:function(){editing=false;draft=n
 return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("div",{class:"row"},[save,cancel])]))}
 var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnread=0;
 function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"");document.title=(mUnread&&me?"("+mUnread+") ":"")+"Futurebook"}
+function pref(k,d){try{var v=localStorage.getItem("fb_"+k);return v===null?d:v==="1"}catch(e){return d}}
+function setPref(k,v){try{localStorage.setItem("fb_"+k,v?"1":"0")}catch(e){}}
+var ONL={},presCh=null,onlyOn=false;
+function isOnline(id){return !!ONL[id]}
+function avo(id){return el("span",{class:"avw"},[av(id),el("span",{class:"odot"+(isOnline(id)?" on":""),"data-dot":id,title:"Online","aria-hidden":"true"},[])])}
+function friendsOnline(){return friendsOf(me.id).map(function(x){return x.id}).filter(isOnline).sort(function(a,b){return nm(a).localeCompare(nm(b))})}
+function onlineBox(){
+var ids=friendsOnline();
+var rows=ids.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)]),
+el("a",{class:"btn alt",href:"#messages/"+id,style:"margin-left:auto;text-decoration:none;padding:6px 10px"},["Message"])])});
+return el("div",{class:"card",id:"onlbox"},[el("h3",{},["Online friends ("+ids.length+")"])].concat(rows.length?rows:[el("p",{class:"empty"},[pref("showon",true)?"No friends online right now.":"Online status is off, so you won\u2019t show as online."])]))}
+function presPaint(){
+[].forEach.call(document.querySelectorAll("[data-dot]"),function(d){d.classList.toggle("on",isOnline(d.getAttribute("data-dot")))});
+var b=document.getElementById("onlbox");if(b&&me&&D&&b.parentNode)b.parentNode.replaceChild(onlineBox(),b);
+if(route().name==="profile"&&ptab==="friends"&&onlyOn&&!document.activeElement.closest(".mcomp"))draw()}
+function presSync(){var st={};try{st=presCh.presenceState()||{}}catch(e){}var o={};Object.keys(st).forEach(function(k){o[k]=1});ONL=o;presPaint()}
+function presOn(){if(presCh||!me||needMfa||!sb.channel)return;
+try{presCh=sb.channel("online-users",{config:{presence:{key:me.id}}});
+presCh.on("presence",{event:"sync"},presSync);
+presCh.subscribe(function(st){if(st==="SUBSCRIBED"&&pref("showon",true)){try{presCh.track({at:Date.now()})}catch(e){}}})}catch(e){presCh=null}}
+function presOff(){try{if(presCh)sb.removeChannel(presCh)}catch(e){}presCh=null;ONL={}}
+function setShowOnline(v){setPref("showon",v);if(presCh){try{v?presCh.track({at:Date.now()}):presCh.untrack()}catch(e){}}}
+var AC=null,dinged={},lastDing=0;
+function audioCtx(){if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;try{AC=new C()}catch(e){return null}}return AC}
+function unlockAudio(){var c=audioCtx();if(c&&c.state==="suspended")try{c.resume()}catch(e){}}
+["pointerdown","keydown","touchstart"].forEach(function(ev){document.addEventListener(ev,unlockAudio,{passive:true})});
+function ding(force){
+if(!force&&!pref("sound",true))return;
+var c=audioCtx();if(!c||c.state!=="running")return;
+if(Date.now()-lastDing<800)return;lastDing=Date.now();
+var t=c.currentTime;
+[[880,0],[1318.5,.13]].forEach(function(n){var o=c.createOscillator(),g=c.createGain(),a=t+n[1];
+o.type="sine";o.frequency.value=n[0];
+g.gain.setValueAtTime(.0001,a);g.gain.exponentialRampToValueAtTime(.22,a+.02);g.gain.exponentialRampToValueAtTime(.0001,a+.4);
+o.connect(g);g.connect(c.destination);o.start(a);o.stop(a+.45)})}
+function soundFor(rows){var f=false;rows.forEach(function(m){if(m&&m.id&&!dinged[m.id]){dinged[m.id]=1;if(!(D&&D.blocked&&D.blocked.indexOf(m.sender)>-1))f=true}});if(f)ding()}
 var seenM=null;
 var animSeen={},animFor=null;
 var ICO={back:'<path d="M15 5l-7 7 7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',send:'<path d="M12 19V5M5 12l7-7 7 7"/>'};
@@ -1065,7 +1114,7 @@ input.addEventListener("focus",function(){popRead(id)});
 win.addEventListener("mousedown",function(){popRead(id)})}
 var chkBusy=false,hidTick=0,rtCh=null;
 async function checkMsgs(){if(chkBusy)return;chkBusy=true;try{await checkMsgs0()}finally{chkBusy=false}}
-function liveMsgs(){if(rtCh||!me||needMfa||!sb.channel)return;try{rtCh=sb.channel("msgs-"+me.id).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"recipient=eq."+me.id},function(){checkMsgs()}).subscribe()}catch(e){rtCh=null}}
+function liveMsgs(){if(rtCh||!me||needMfa||!sb.channel)return;try{rtCh=sb.channel("msgs-"+me.id).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"recipient=eq."+me.id},function(pl){if(pl&&pl.new)soundFor([pl.new]);checkMsgs()}).subscribe()}catch(e){rtCh=null}}
 function liveMsgsOff(){try{if(rtCh)sb.removeChannel(rtCh)}catch(e){}rtCh=null}
 async function checkMsgs0(){
 if(!me||needMfa)return;
@@ -1081,6 +1130,7 @@ rows.forEach(function(m){seenM[m.id]=1});
 markDelivered(rows);
 paintBell();
 if(!fresh.length)return;
+soundFor(fresh);
 if(route().name==="messages"&&!document.hidden){closePops();return}
 var by={},order=[];fresh.forEach(function(m){if(!by[m.sender]){by[m.sender]=[];order.push(m.sender)}by[m.sender].push(m)});
 order.forEach(function(id){openPop(id,by[id])});
@@ -1253,7 +1303,7 @@ if(!M.busy)loadMsgs().then(paintMsgs);
 var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
 setTimeout(paintMsgs,0);
 if(!id)return el("div",{class:"card"},[el("h3",{style:"margin-bottom:8px"},["Messages"]),box]);
-var head=el("div",{class:"chead"},[el("a",{href:"#messages",class:"cback","aria-label":"All conversations",title:"All conversations"},[ico("back")]),av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
+var head=el("div",{class:"chead"},[el("a",{href:"#messages",class:"cback","aria-label":"All conversations",title:"All conversations"},[ico("back")]),avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
 var kids=[head,box];
 if(isFriend(id)){
 var inp=el("textarea",{rows:"1",placeholder:"Message\u2026","aria-label":"Write a message",maxlength:"2000",autocomplete:"off",enterkeyhint:"send","data-k":"msg-"+id});
@@ -1300,14 +1350,17 @@ function profileTabs(id,n){
 function tab(key,label){return el("button",{type:"button",role:"tab","aria-selected":String(ptab===key),onclick:function(){ptab=key;draw()}},[label])}
 return el("div",{class:"ptabs",role:"tablist"},[tab("posts","Posts"),tab("friends","Friends ("+n+")")])}
 function friendsTab(id,mine){
-var list=friendsOf(id).sort(function(a,b){return nm(a.id).localeCompare(nm(b.id))});
+var all=friendsOf(id).sort(function(a,b){return nm(a.id).localeCompare(nm(b.id))});
+var list=onlyOn?all.filter(function(x){return isOnline(x.id)}):all;
+var tg=el("label",{class:"onl-tg"},[el("input",{type:"checkbox",checked:onlyOn?"checked":null,onchange:function(e){onlyOn=e.target.checked;draw()}}),"Show online friends only"]);
+if(onlyOn&&all.length&&!list.length)return el("div",{},[tg,el("p",{class:"empty"},["None of these friends are online right now."])]);
 if(!list.length)return el("p",{class:"empty"},[mine?"You haven\u2019t added any friends yet. Find people in the sidebar and send a request.":"No friends to show."]);
-return el("div",{class:"card"},list.map(function(x){
+return el("div",{},[tg,el("div",{class:"card"},list.map(function(x){
 var u=D.info[x.id]||{};
-var kids=[av(x.id),el("span",{},[el("a",{class:"nm",href:"#profile/"+x.id},[nm(x.id)]),u.username?el("small",{class:"when"},["@"+u.username]):""])];
+var kids=[avo(x.id),el("span",{},[el("a",{class:"nm",href:"#profile/"+x.id},[nm(x.id)]),u.username?el("small",{class:"when"},["@"+u.username]):"",isOnline(x.id)?el("small",{class:"onl-n"},["Online"]):""])];
 if(mine)kids.push(el("button",{class:"btn alt",style:"margin-left:auto",onclick:function(){if(!confirm("Remove "+nm(x.id)+" from your friends?"))return;
 act(async function(){var r=await sb.from("friendships").delete().eq("id",x.f.id);if(r.error)throw r.error})}},["Unfriend"]));
-return el("div",{class:"row",style:"margin-bottom:8px"},kids)}))}
+return el("div",{class:"row",style:"margin-bottom:8px"},kids)}))])}
 function profilePage(id){
 if(!D.names[id])return el("div",{class:"card"},[el("p",{class:"empty"},["This profile isn’t available."])]);
 if(!X[id])loadExtras(id);
@@ -1516,10 +1569,11 @@ var others=Object.keys(D.names).filter(function(id){return id!==me.id&&!linked[i
 return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)]),el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])])});
 var sent=D.fs.filter(function(f){return f.requester===me.id&&f.status==="pending"&&D.names[f.addressee]}).map(function(f){
 return el("div",{class:"row"},[av(f.addressee),el("span",{},[el("a",{class:"nm",href:"#profile/"+f.addressee},[nm(f.addressee)])," (request sent)"])])});
-var fr=friends.map(function(id){return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])])});
+var fr=friends.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])])});
 function box(title,items,emptyText){return el("div",{class:"card"},[el("h3",{},[title])].concat(items.length?items:[el("p",{class:"empty"},[emptyText])]))}
 return el("aside",{class:"side"},[
 box("Friend requests",reqs,"No new requests."),
+onlineBox(),
 box("People you may know",others.concat(sent),"No one else has joined yet. Invite a friend!"),
 box("Your friends ("+friends.length+")",fr,"Add your first friend.")])}
 
@@ -1530,7 +1584,7 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeMenu();closeSheet()}});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;liveMsgsOff();closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;liveMsgsOff();presOff();closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
 setInterval(function(){if(document.hidden&&(++hidTick%6))return;checkMsgs()},5000);
