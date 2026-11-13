@@ -335,6 +335,18 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 .onl-tg{display:flex;align-items:center;gap:8px;margin:0 0 10px;color:var(--mute);font-weight:600}
 .onl-tg input{width:auto;margin:0}
 .onl-n{color:#16a34a;font-weight:600;font-size:.85rem}
+/* aligned action buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;line-height:1.2;white-space:nowrap;min-height:40px;padding:8px 16px;font-size:.92rem;border-radius:10px;text-align:center}
+.btn.alt{min-height:40px;padding:8px 16px;font-size:.92rem}
+.side .row{flex-wrap:nowrap;gap:10px}
+.side .row>.nm,.side .row>span:not(.avw){flex:1 1 auto;min-width:0;margin-right:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side .row>.btn{flex:none;min-height:34px;padding:6px 12px;font-size:.88rem}
+.side .row>.nm+.btn,.side .row>span:not(.avw)+.btn{margin-left:auto}
+.side .row>.btn+.btn{margin-left:0}
+.side .row .avw+.nm{flex:1 1 auto}
+.pcard .row:has(>.btn),.profile .row:has(>.btn){gap:8px}
+.pcard .row>.badge{display:inline-flex;align-items:center;min-height:40px;padding:0 14px}
+@media(max-width:760px){.side .row>.btn{min-height:38px}}
 </style>
 </head>
 <body>
@@ -720,7 +732,7 @@ var f=D.fs.filter(function(x){return (x.requester===me.id&&x.addressee===id)||(x
 function del(label,ask){return el("button",{class:"btn alt",onclick:function(){if(ask&&!confirm(ask))return;act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},[label])}
 if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])];
 if(!f)return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])];
-if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),el("a",{href:"#messages/"+id,class:"btn",style:"text-decoration:none;display:inline-block"},["Message"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
+if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),el("a",{href:"#messages/"+id,class:"btn"},["Message"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
 return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept request"]),del("Decline",null)]}
 
@@ -825,7 +837,7 @@ function friendsOnline(){return friendsOf(me.id).map(function(x){return x.id}).f
 function onlineBox(){
 var ids=friendsOnline();
 var rows=ids.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)]),
-el("a",{class:"btn alt",href:"#messages/"+id,style:"margin-left:auto;text-decoration:none;padding:6px 10px"},["Message"])])});
+el("a",{class:"btn alt",href:"#messages/"+id},["Message"])])});
 return el("div",{class:"card",id:"onlbox"},[el("h3",{},["Online friends ("+ids.length+")"])].concat(rows.length?rows:[el("p",{class:"empty"},[pref("showon",true)?"No friends online right now.":"Online status is off, so you won\u2019t show as online."])]))}
 function presPaint(){
 [].forEach.call(document.querySelectorAll("[data-dot]"),function(d){d.classList.toggle("on",isOnline(d.getAttribute("data-dot")))});
