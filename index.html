@@ -721,7 +721,8 @@ var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnrea
 function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"");document.title=(mUnread&&me?"("+mUnread+") ":"")+"Futurebook"}
 var seenM=null;
 /* ---- rich messages: GIF, location, live location ---- */
-var GIPHY_KEY="";
+/* Replace with your own free key from developers.giphy.com for reliable GIF search */
+var GIPHY_KEY="dc6zaTOxFJmzC";
 var MARK=/^\[\[(gif|loc|live):([^\]]{1,400})\]\]$/;
 function parseMark(b){var m=MARK.exec(b||"");return m?{k:m[1],v:m[2]}:null}
 function gifOk(u){return /^https:\/\/(media[0-9]*|i)\.giphy\.com\/[A-Za-z0-9_\-\/\.]+$/.test(u||"")}
