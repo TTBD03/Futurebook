@@ -322,7 +322,7 @@ me=s?s.user:null;needMfa=false;
 if(me){try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}}
 if(me&&!needMfa){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}
 try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}}
-draw();if(me&&!needMfa)checkMsgs()}
+draw();if(me&&!needMfa){checkMsgs();liveMsgs()}}
 
 var KEEP={};
 function draw(){var y=window.scrollY;
@@ -950,7 +950,11 @@ send.addEventListener("click",doSend);
 input.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();doSend()}});
 input.addEventListener("focus",function(){popRead(id)});
 win.addEventListener("mousedown",function(){popRead(id)})}
-async function checkMsgs(){
+var chkBusy=false,hidTick=0,rtCh=null;
+async function checkMsgs(){if(chkBusy)return;chkBusy=true;try{await checkMsgs0()}finally{chkBusy=false}}
+function liveMsgs(){if(rtCh||!me||needMfa||!sb.channel)return;try{rtCh=sb.channel("msgs-"+me.id).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"recipient=eq."+me.id},function(){checkMsgs()}).subscribe()}catch(e){rtCh=null}}
+function liveMsgsOff(){try{if(rtCh)sb.removeChannel(rtCh)}catch(e){}rtCh=null}
+async function checkMsgs0(){
 if(!me||needMfa)return;
 try{
 var cols=["id,sender,recipient,body,created_at,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at"],r;
@@ -1378,11 +1382,13 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeMenu();closeSheet()}});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;liveMsgsOff();closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
-setInterval(checkMsgs,15000);
-setInterval(function(){if(Object.keys(pops).length&&!document.hidden)checkMsgs()},4000);
+setInterval(function(){if(document.hidden&&(++hidTick%6))return;checkMsgs()},5000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden)checkMsgs()});
+window.addEventListener("focus",function(){checkMsgs()});
+window.addEventListener("online",function(){checkMsgs()});
 window.addEventListener("hashchange",function(){if(me&&route().name==="messages")closePops()});
 setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
