@@ -91,7 +91,9 @@ input[type=file]{padding:8px}
 .pcard{overflow:hidden}
 .cover{height:180px;margin:-16px -16px 14px;background:linear-gradient(135deg,var(--pri),var(--soft))}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
-.ver{color:var(--pri);font-weight:800;margin-left:6px}
+.ver{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--pri);color:var(--onpri);font-size:10px;font-weight:800;line-height:1;margin-left:5px;vertical-align:middle;flex:none}
+h2 .ver{width:20px;height:20px;font-size:12px;margin-left:8px}
+.cpt .ver{width:14px;height:14px;font-size:9px}
 .handle{color:var(--mute);margin-top:-2px}
 .bio{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .about dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 18px}
@@ -563,7 +565,7 @@ if(mUnread>0)items.push(el("a",{href:"#messages",class:"row note unread"},[el("s
 items=items.concat(D.notes.map(function(n){
 var href=(n.type==="friend_request"||n.type==="friend_accept")?"#profile/"+n.actor:(n.post_id?"#post/"+n.post_id:"#home");
 return el("a",{href:href,class:"row note"+(fresh.indexOf(n.id)>-1?" unread":"")},[av(n.actor),
-el("span",{},[el("b",{},[nm(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])}));
+el("span",{},[el("b",{},[nmv(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])}));
 if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).then(function(r){
 if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes, comments and messages will show up here."])]))}
@@ -658,7 +660,7 @@ el("h3",{class:"sub"},["Online status"]),
 el("p",{class:"empty"},["Let your friends see when you\u2019re online (a green dot next to your name)."]),
 el("button",{class:"btn alt",onclick:function(){setShowOnline(!pref("showon",true));draw()}},[pref("showon",true)?"Showing as online \u2013 turn off":"Hidden \u2013 show me as online"]),
 el("h3",{class:"sub"},["Blocked people"]),
-el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
+el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nmv(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
 el("h3",{class:"sub"},["Who can see your details"]),
 el("p",{class:"empty"},["Your email and phone are shared with friends only unless you choose otherwise. To set Public, Friends or Only me for each detail, open your profile and choose Edit profile."]),
 el("a",{class:"btn alt",href:"#profile/"+me.id,style:"display:inline-block;text-decoration:none"},["Go to my profile"]),
@@ -793,6 +795,7 @@ var BGLIST=["linear-gradient(135deg,#3030e8,#7c3aed)","linear-gradient(135deg,#e
 function safeBg(b){return BGLIST.indexOf(b)>-1?b:""}
 function okStorageUrl(u){return typeof u==="string"&&u.indexOf(SUPABASE_URL+"/storage/v1/object/public/")===0}
 function isFriend(id){return D.fs.some(function(f){return f.status==="accepted"&&((f.requester===me.id&&f.addressee===id)||(f.requester===id&&f.addressee===me.id))})}
+function nmv(id){var u=D&&D.info&&D.info[id],t=el("span",{class:"nmv"},[nm(id)]);if(u&&u.verified)t.appendChild(verMark());return t}
 function verMark(){return el("span",{class:"ver",role:"img",title:"Verified profile","aria-label":"Verified profile"},["✓"])}
 var PV=[["public","\ud83c\udf10 Public"],["friends","\ud83d\udc65 Friends"],["me","\ud83d\udd12 Only me"]];
 function pvDef(k){return(k==="contact_email"||k==="phone")?"friends":"public"}
@@ -886,7 +889,7 @@ function avo(id){return el("span",{class:"avw"},[av(id),el("span",{class:"odot"+
 function friendsOnline(){return friendsOf(me.id).map(function(x){return x.id}).filter(isOnline).sort(function(a,b){return nm(a).localeCompare(nm(b))})}
 function onlineBox(){
 var ids=friendsOnline();
-var rows=ids.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)]),
+var rows=ids.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nmv(id)]),
 el("a",{class:"btn alt",href:"#messages/"+id},["Message"])])});
 return el("div",{class:"card",id:"onlbox"},[el("h3",{},["Online friends ("+ids.length+")"])].concat(rows.length?rows:[el("p",{class:"empty"},[pref("showon",true)?"No friends online right now.":"Online status is off, so you won\u2019t show as online."])]))}
 function presPaint(){
@@ -1127,7 +1130,7 @@ var body=el("div",{class:"cpb","aria-live":"polite"}),err=el("small",{class:"cpe
 var input=el("input",{placeholder:"Reply…","aria-label":"Reply to "+nm(id),maxlength:"2000",autocomplete:"off"});
 var send=el("button",{class:"msend",type:"button","aria-label":"Send"},[ico("send")]);
 var win=el("div",{class:"cp",role:"dialog","aria-label":"Chat with "+nm(id)});
-var head=el("div",{class:"cph"},[av(id),el("span",{class:"cpt"},[nm(id)]),
+var head=el("div",{class:"cph"},[av(id),el("span",{class:"cpt"},[nmv(id)]),
 el("a",{href:"#messages/"+id,title:"Open full chat","aria-label":"Open full chat"},["⤢"]),
 el("button",{type:"button",title:"Close","aria-label":"Close chat",onclick:function(){closePop(id)}},["✕"])]);
 head.addEventListener("click",function(e){if(e.target.closest&&e.target.closest("a,button"))return;win.classList.toggle("min");if(!win.classList.contains("min"))popRead(id)});
@@ -1308,7 +1311,7 @@ var sig="L"+rows.map(function(c){return c.id+(c.last?c.last.id:"")+c.unread}).jo
 if(box.getAttribute("data-sig")===sig)return;box.setAttribute("data-sig",sig);box.innerHTML="";
 if(!rows.length){box.appendChild(el("p",{class:"empty"},["Add some friends to start a conversation."]));return}
 rows.forEach(function(c){box.appendChild(el("a",{href:"#messages/"+c.id,class:"row note"+(c.unread?" unread":"")},[av(c.id),
-el("span",{},[el("b",{},[nm(c.id)]),el("small",{class:"when"},[c.last?msgSnippet(c.last):"No messages yet"])]),
+el("span",{},[el("b",{},[nmv(c.id)]),el("small",{class:"when"},[c.last?msgSnippet(c.last):"No messages yet"])]),
 c.unread?el("span",{class:"mbadge"},[String(c.unread)]):""]))});
 return}
 var id=r.id;
@@ -1365,7 +1368,7 @@ if(!M.busy)loadMsgs().then(paintMsgs);
 var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
 setTimeout(paintMsgs,0);
 if(!id)return el("div",{class:"card"},[el("h3",{style:"margin-bottom:8px"},["Messages"]),box]);
-var head=el("div",{class:"chead"},[el("a",{href:"#messages",class:"cback","aria-label":"All conversations",title:"All conversations"},[ico("back")]),avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
+var head=el("div",{class:"chead"},[el("a",{href:"#messages",class:"cback","aria-label":"All conversations",title:"All conversations"},[ico("back")]),avo(id),el("a",{class:"nm",href:"#profile/"+id},[nmv(id)])]);
 var kids=[head,box];
 if(isFriend(id)){
 var inp=el("textarea",{rows:"1",placeholder:"Message\u2026","aria-label":"Write a message",maxlength:"2000",autocomplete:"off",enterkeyhint:"send","data-k":"msg-"+id});
@@ -1419,7 +1422,7 @@ if(onlyOn&&all.length&&!list.length)return el("div",{},[tg,el("p",{class:"empty"
 if(!list.length)return el("p",{class:"empty"},[mine?"You haven\u2019t added any friends yet. Find people in the sidebar and send a request.":"No friends to show."]);
 return el("div",{},[tg,el("div",{class:"card"},list.map(function(x){
 var u=D.info[x.id]||{};
-var kids=[avo(x.id),el("span",{},[el("a",{class:"nm",href:"#profile/"+x.id},[nm(x.id)]),u.username?el("small",{class:"when"},["@"+u.username]):"",isOnline(x.id)?el("small",{class:"onl-n"},["Online"]):""])];
+var kids=[avo(x.id),el("span",{},[el("a",{class:"nm",href:"#profile/"+x.id},[nmv(x.id)]),u.username?el("small",{class:"when"},["@"+u.username]):"",isOnline(x.id)?el("small",{class:"onl-n"},["Online"]):""])];
 if(mine)kids.push(el("button",{class:"btn alt",style:"margin-left:auto",onclick:function(){if(!confirm("Remove "+nm(x.id)+" from your friends?"))return;
 act(async function(){var r=await sb.from("friendships").delete().eq("id",x.f.id);if(r.error)throw r.error})}},["Unfriend"]));
 return el("div",{class:"row",style:"margin-bottom:8px"},kids)}))])}
@@ -1439,7 +1442,7 @@ return el("div",{},[
 el("div",{class:"card pcard"},[
 el("div",{class:"cover"},u.cover?[el("img",{src:u.cover,alt:"Cover photo of "+nm(id)})]:[]),
 el("div",{class:"profile"},[big,el("div",{},[
-el("h2",{},[nm(id)].concat(u.verified?[verMark()]:[])),
+el("h2",{},[nmv(id)]),
 u.username?el("div",{class:"handle"},["@"+u.username]):"",
 u.bio?el("p",{class:"bio"},[u.bio]):"",
 el("div",{class:"row",style:"margin-top:10px"},acts)])])]),
@@ -1512,7 +1515,7 @@ var ovl=el("div",{class:"ovl",onclick:function(e){if(e.target===ovl)closeLikes()
 el("div",{class:"pop",role:"dialog","aria-modal":"true","aria-label":"People who reacted"},[
 el("header",{},[el("h3",{},["Reactions ("+likes.length+")"]),close]),
 el("div",{class:"list"},likes.map(function(l){return el("div",{class:"row"},[av(l.user_id),
-el("a",{class:"nm",href:"#profile/"+l.user_id,onclick:function(){openLikes=null}},[nm(l.user_id)]),
+el("a",{class:"nm",href:"#profile/"+l.user_id,onclick:function(){openLikes=null}},[nmv(l.user_id)]),
 el("span",{class:"rx",title:rx(l.reaction)[2]},[rIcon(rx(l.reaction)[0],24)])])}))])]);
 setTimeout(function(){close.focus()},0);return ovl}
 if(!window.__likesEsc){window.__likesEsc=1;document.addEventListener("keydown",function(e){if(e.key==="Escape"&&(openLikes||shareFor)){openLikes=null;shareFor=null;draw()}})}
@@ -1608,8 +1611,8 @@ var pop=el("div",{class:"pm-pop",role:"menu"},menu);
 pop.addEventListener("click",function(){setTimeout(function(){openMenu=null},0)});
 menuEl=el("div",{class:"pmenu",onmouseleave:function(){clearTimeout(window.__pmT);window.__pmT=setTimeout(closeMenu,350)},onmouseenter:function(){clearTimeout(window.__pmT)}},[el("button",{type:"button","aria-label":"Post options","aria-haspopup":"menu","aria-expanded":openMenu===p.id?"true":"false",onclick:function(){openMenu=openMenu===p.id?null:p.id;draw()}},["\u22ef"])].concat(openMenu===p.id?[pop]:[]))}
 var art=el("article",{class:"card post"},[
-el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nm(p.user_id)]),el("small",{},[ago(p.scheduled_at&&new Date(p.scheduled_at).getTime()<=Date.now()?p.scheduled_at:p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
-p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nm(p.shared_from_user)])]):"",
+el("div",{class:"row"},[av(p.user_id),el("div",{class:"meta"},[el("a",{class:"nm",href:"#profile/"+p.user_id},[nmv(p.user_id)]),el("small",{},[ago(p.scheduled_at&&new Date(p.scheduled_at).getTime()<=Date.now()?p.scheduled_at:p.created_at)+(p.visibility?(p.visibility==="public"?" \u00b7 \ud83c\udf10 Public":" \u00b7 \ud83d\udc65 Friends"):"")])])]),
+p.shared_from_user&&p.shared_from_user!==p.user_id?el("p",{class:"empty"},["Shared from ",el("a",{class:"nm",href:"#profile/"+p.shared_from_user},[nmv(p.shared_from_user)])]):"",
 p.location_name?el("p",{class:"empty",style:"margin:0 0 6px"},["\ud83d\udccd ",el("a",{href:"https://www.openstreetmap.org/search?query="+encodeURIComponent(p.location_name),target:"_blank",rel:"noopener noreferrer"},[p.location_name])]):"",
 xtra(p),p.body.trim()?(p.extra&&safeBg(p.extra.bg)?el("div",{class:"bgp",style:"background:"+safeBg(p.extra.bg)},[p.body]):el("p",{},[p.body])):"",...postMediaEl(p),
 p.image_path?capEl(p):"",
@@ -1617,21 +1620,21 @@ p.image_path&&D.imgs[p.image_path]?el("img",{class:"pimg",src:D.imgs[p.image_pat
 el("div",{class:"acts"},acts),
 openLikes===p.id&&likes.length?likersPop(likes):"",
 shareFor===p.id?shareDlg(p):"",
-el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("a",{class:"nm",href:"#profile/"+c.user_id},[nm(c.user_id)]),c.body])})),
+el("div",{},cms.map(function(c){return el("div",{class:"cmt"},[el("a",{class:"nm",href:"#profile/"+c.user_id},[nmv(c.user_id)]),c.body])})),
 p.comments_off?el("p",{class:"empty",style:"margin-top:8px"},["Comments are turned off for this post."]):el("div",{style:"margin-top:8px"},[cin])]);if(menuEl)art.firstChild.appendChild(menuEl);return art}
 
 function side(){
 var incoming=D.fs.filter(function(f){return f.addressee===me.id&&f.status==="pending"&&D.names[f.requester]});
 var friends=D.fs.filter(function(f){return f.status==="accepted"}).map(function(f){return f.requester===me.id?f.addressee:f.requester}).filter(function(id){return D.names[id]});
 var linked={};D.fs.forEach(function(f){linked[f.requester===me.id?f.addressee:f.requester]=f});
-var reqs=incoming.map(function(f){return el("div",{class:"row"},[av(f.requester),el("a",{class:"nm",href:"#profile/"+f.requester},[nm(f.requester)]),
+var reqs=incoming.map(function(f){return el("div",{class:"row"},[av(f.requester),el("a",{class:"nm",href:"#profile/"+f.requester},[nmv(f.requester)]),
 el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept"]),
 el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},["Decline"])])});
 var others=Object.keys(D.names).filter(function(id){return id!==me.id&&!linked[id]&&D.blocked.indexOf(id)<0}).map(function(id){
-return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)]),el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])])});
+return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nmv(id)]),el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])])});
 var sent=D.fs.filter(function(f){return f.requester===me.id&&f.status==="pending"&&D.names[f.addressee]}).map(function(f){
-return el("div",{class:"row"},[av(f.addressee),el("span",{},[el("a",{class:"nm",href:"#profile/"+f.addressee},[nm(f.addressee)])," (request sent)"])])});
-var fr=friends.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])])});
+return el("div",{class:"row"},[av(f.addressee),el("span",{},[el("a",{class:"nm",href:"#profile/"+f.addressee},[nmv(f.addressee)])," (request sent)"])])});
+var fr=friends.map(function(id){return el("div",{class:"row"},[avo(id),el("a",{class:"nm",href:"#profile/"+id},[nmv(id)])])});
 function box(title,items,emptyText){return el("div",{class:"card"},[el("h3",{},[title])].concat(items.length?items:[el("p",{class:"empty"},[emptyText])]))}
 return el("aside",{class:"side"},[
 box("Friend requests",reqs,"No new requests."),
