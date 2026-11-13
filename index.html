@@ -702,7 +702,7 @@ b.addEventListener("click",function(){bg=g;[].forEach.call(swr.children,function
 var panels=[];
 function tg(label,kids){var p=el("div",{class:"panel"},kids);panels.push(p);return [el("button",{class:"btn alt",type:"button",onclick:function(){p.style.display=p.style.display==="block"?"none":"block"}},[label]),p]}
 var T=[tg("\ud83c\udfa5 Video",[vid]),tg("\ud83d\udd34 Live",[lbtn,lvv,lstat]),tg("\ud83d\udd17 Link",[link]),tg("GIF",[gif]),tg("\ud83d\ude0a Feeling",[feel]),tg("\ud83c\udfd7 Tag friends",[friendIds.length?tags:el("p",{class:"hint"},["Add friends to tag them."])]),tg("\ud83c\udfa8 Background",[swr]),tg("\ud83d\udcca Poll",[pq].concat(po)),tg("\ud83d\udd52 Schedule",[when])];
-var box=el("div",{class:"card"},[ta,pic,cap,prev,el("div",{class:"row",style:"margin-bottom:8px"},[lt,gps].concat(T.map(function(t){return t[0]}))),loc].concat(T.map(function(t){return t[1]}),[el("label",{class:"row",style:"margin-bottom:8px"},[off,"Turn off comments"]),aud,el("button",{class:"btn",onclick:function(){
+var box=el("div",{class:"card"},[ta,pic,cap,prev,el("div",{class:"row",style:"margin-bottom:8px"},[lt,gps].concat(T.map(function(t){return t[0]}))),loc].concat(T.map(function(t){return t[1]}),[aud,el("button",{class:"btn",onclick:function(){
 var v=ta.value.trim(),fs=[].slice.call(pic.files||[],0,6),f=fs[0],vf=(vid.files&&vid.files[0])||liveBlob,gv=safeUrl(gif.value.trim()),lk=safeUrl(link.value.trim());
 var opts=po.map(function(i){return i.value.trim()}).filter(Boolean),pollOn=pq.value.trim()&&opts.length>=2;
 if(!v&&!f&&!vf&&!gv&&!lk&&!pollOn&&!loc.value.trim())return;
@@ -715,7 +715,7 @@ if(vf){var ext=/mp4/.test(vf.type)?"mp4":/quicktime/.test(vf.type)?"mov":"webm";
 if(feel.value)ex.feel=feel.value;var tg2=[].filter.call(tags.options,function(o){return o.selected}).map(function(o){return o.value});if(tg2.length)ex.tags=tg2;
 if(lk)ex.link=lk;if(gv)ex.gif=gv;if(bg&&!path&&!vf&&!gv)ex.bg=bg;if(pollOn)ex.poll={q:pq.value.trim(),o:opts};
 var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);if(aud.value==="public")row.visibility="public";var lv=loc.value.trim();if(lv)row.location_name=lv.slice(0,120);
-if(Object.keys(ex).length)row.extra=ex;if(off.checked)row.comments_off=true;if(sched&&sched.getTime()>Date.now())row.scheduled_at=sched.toISOString();
+if(Object.keys(ex).length)row.extra=ex;if(sched&&sched.getTime()>Date.now())row.scheduled_at=sched.toISOString();
 var r=await sb.from("posts").insert(row);
 if(r.error)throw dbErr(r.error);ta.value="";say(row.scheduled_at?"Post scheduled for "+sched.toLocaleString()+".":"",!!row.scheduled_at)})}},["Post"])]));
 var feedPosts=D.posts.filter(function(p){return !p._x});
