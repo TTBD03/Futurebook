@@ -722,7 +722,7 @@ function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent
 var seenM=null;
 /* ---- rich messages: GIF, location, live location ---- */
 /* Replace with your own free key from developers.giphy.com for reliable GIF search */
-var GIPHY_KEY="dc6zaTOxFJmzC";
+var GIPHY_KEY="egO2CiZ7wfiVvRmwtvuOtPNGvrtOmK8M";
 var MARK=/^\[\[(gif|loc|live):([^\]]{1,400})\]\]$/;
 function parseMark(b){var m=MARK.exec(b||"");return m?{k:m[1],v:m[2]}:null}
 function gifOk(u){return /^https:\/\/(media[0-9]*|i)\.giphy\.com\/[A-Za-z0-9_\-\/\.]+$/.test(u||"")}
@@ -824,9 +824,11 @@ var load=function(term){
 msg.textContent="";grid.innerHTML="";
 var url="https://api.giphy.com/v1/gifs/"+(term?"search":"trending")+"?api_key="+encodeURIComponent(GIPHY_KEY)+"&limit=24&rating=pg"+(term?"&q="+encodeURIComponent(term):"");
 fetch(url).then(function(r){return r.json()}).then(function(j){
-var list=(j&&j.data)||[];if(!list.length){msg.textContent="No GIFs found.";return}
+if(j&&j.meta&&j.meta.status&&j.meta.status!==200){msg.textContent=(j.meta.status===401||j.meta.status===403)?"GIF search key was rejected. Add your own free GIPHY key in the code (GIPHY_KEY).":"GIF search error ("+j.meta.status+"): "+(j.meta.msg||"try again");return}
+var list=Array.isArray(j&&j.data)?j.data:[];if(!list.length){msg.textContent="No GIFs found.";return}
 list.forEach(function(g){var im=g.images&&g.images.fixed_height,sm=g.images&&g.images.fixed_height_small;var full=im&&String(im.url||"").split("?")[0];var prev=(sm&&String(sm.url||"").split("?")[0])||full;if(!gifOk(full)||!gifOk(prev))return;
 grid.appendChild(el("button",{class:"gifb",type:"button","aria-label":g.title||"GIF",onclick:function(){send(full)}},[el("img",{src:prev,alt:g.title||"GIF",loading:"lazy",referrerpolicy:"no-referrer"})]))})
+if(!grid.firstChild)msg.textContent="No GIFs found.";
 }).catch(function(){msg.textContent="Couldn’t load GIFs. Check your connection."})};
 q.addEventListener("input",function(){clearTimeout(tm);tm=setTimeout(function(){load(q.value.trim())},400)});
 box.appendChild(q);box.appendChild(grid);box.appendChild(msg);box.appendChild(el("small",{class:"when"},["Powered by GIPHY"]));box.appendChild(up);load("");q.focus()
