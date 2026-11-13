@@ -222,7 +222,7 @@ var SUPABASE_KEY="sb_publishable_iB2bMJMLJuP5gE4pAdDvyg_Lo2jptUN";
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 var COLORS=["#3030e8","#e8453c","#0f9d73","#c2410c","#7c3aed","#0e7490"];
 var root=document.getElementById("app");
-var me=null,D=null,showNotes=false,showSettings=false,recovering=/type=recovery/.test(location.hash),mode="up",notice={text:"",ok:false};
+var me=null,D=null,needMfa=false,mfaF=[],mfaEnroll=null,showNotes=false,showSettings=false,recovering=/type=recovery/.test(location.hash),mode="up",notice={text:"",ok:false};
 
 function el(tag,attrs,kids){var e=document.createElement(tag);for(var k in attrs||{}){if(k==="class")e.className=attrs[k];else if(k.slice(0,2)==="on")e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!==null)e.setAttribute(k,attrs[k])}
 (kids||[]).forEach(function(c){e.appendChild(typeof c==="string"?document.createTextNode(c):c)});return e}
@@ -284,14 +284,16 @@ if(!su.error)su.data.forEach(function(x){if(x.signedUrl){urlCache[x.path]={url:x
 
 async function refresh(){
 var s=(await sb.auth.getSession()).data.session;
-me=s?s.user:null;
-if(me){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}}
-draw();if(me)pollUnread()}
+me=s?s.user:null;needMfa=false;
+if(me){try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}}
+if(me&&!needMfa){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}
+try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}}
+draw();if(me&&!needMfa)pollUnread()}
 
 var KEEP={};
 function draw(){var y=window.scrollY;
 if(me&&D)[].forEach.call(root.querySelectorAll("[data-k]"),function(n){KEEP[n.getAttribute("data-k")]=n.value});
-root.innerHTML="";root.appendChild(recovering?resetForm():(me&&D?feed():auth()));
+root.innerHTML="";root.appendChild(recovering?resetForm():(me&&needMfa?mfaForm():(me&&D?feed():auth())));
 [].forEach.call(root.querySelectorAll("[data-k]"),function(n){var v=KEEP[n.getAttribute("data-k")];if(v)n.value=v});
 if(y)window.scrollTo(0,y)}
 
@@ -329,6 +331,26 @@ el("p",{},[mode==="forgot"?"Enter your email and we’ll send you a link to rese
 el("div",{class:"card"},[name,email,pw,msgEl(),el("div",{class:"row"},row)]),
 el("p",{style:"font-size:.9rem"},["By creating an account you agree to our ",el("a",{href:"terms.html"},["Terms"])," and ",el("a",{href:"privacy.html"},["Privacy Policy"]),"."]),
 el("p",{class:"authcp"},["\u00a9 "+new Date().getFullYear()+" Futurebook. All rights reserved."])])}
+
+function mfaForm(){
+var code=el("input",{inputmode:"numeric",maxlength:"6",placeholder:"6-digit code","aria-label":"6-digit code",autocomplete:"one-time-code"});
+var go=el("button",{class:"btn",onclick:async function(){
+go.disabled=true;
+try{
+var c=code.value.replace(/\s+/g,"");
+if(!/^\d{6}$/.test(c))throw new Error("Enter the 6-digit code from your authenticator app.");
+var lf=await sb.auth.mfa.listFactors();
+var f=lf.data&&lf.data.totp&&lf.data.totp[0];
+if(!f)throw new Error("No authenticator found for this account.");
+var v=await sb.auth.mfa.challengeAndVerify({factorId:f.id,code:c});
+if(v.error)throw new Error(/invalid/i.test(v.error.message||"")?"That code isn’t right. Try the newest code.":v.error.message);
+say("");await refresh()
+}catch(e){say(e.message);draw()}
+}},["Verify"]);
+code.addEventListener("keydown",function(e){if(e.key==="Enter")go.click()});
+var out=el("button",{class:"link",onclick:async function(){await sb.auth.signOut({scope:"local"})}},["Log out"]);
+return el("main",{class:"auth"},[el("div",{class:"logo"},["Futurebook"]),el("p",{},["Two-factor authentication: open your authenticator app and enter the 6-digit code for Futurebook."]),
+el("div",{class:"card"},[code,msgEl(),el("div",{class:"row"},[go,out])])])}
 
 function resetForm(){
 var a=el("input",{type:"password",placeholder:"New password (at least 6 characters)","aria-label":"New password",autocomplete:"new-password"});
@@ -387,6 +409,34 @@ if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).t
 if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes and comments will show up here."])]))}
 var stab="account";
+function mfaBlock(){
+if(mfaF.length){return [el("p",{class:"empty"},["Two-factor authentication is ON. You’ll need a code from your authenticator app each time you log in."]),
+el("button",{class:"btn alt",onclick:function(){if(!confirm("Turn off two-factor authentication? Your account will be less protected."))return;
+act(async function(){for(var i=0;i<mfaF.length;i++){var r=await sb.auth.mfa.unenroll({factorId:mfaF[i].id});if(r.error)throw r.error}
+mfaF=[];say("Two-factor authentication is off.",true)})}},["Turn off two-factor"])]}
+if(mfaEnroll){
+var code=el("input",{inputmode:"numeric",maxlength:"6",placeholder:"6-digit code","aria-label":"6-digit code",autocomplete:"one-time-code","data-k":"mfacode"});
+return [el("p",{class:"empty"},["1. Open an authenticator app (Google Authenticator, Microsoft Authenticator, Authy). 2. Scan this QR code. 3. Type the 6-digit code it shows."]),
+el("img",{src:mfaEnroll.qr,alt:"QR code for your authenticator app",width:"180",height:"180",style:"background:#fff;padding:8px;border-radius:8px;display:block;margin:0 0 10px"}),
+el("p",{class:"empty"},["Can’t scan? Enter this key in your app: "+mfaEnroll.secret]),
+code,
+el("div",{class:"row"},[
+el("button",{class:"btn",onclick:function(){act(async function(){
+var c=code.value.replace(/\s+/g,"");
+if(!/^\d{6}$/.test(c))throw new Error("Enter the 6-digit code from your app.");
+var v=await sb.auth.mfa.challengeAndVerify({factorId:mfaEnroll.id,code:c});
+if(v.error)throw new Error(/invalid/i.test(v.error.message||"")?"That code isn’t right. Try the newest code.":v.error.message);
+mfaEnroll=null;KEEP.mfacode="";say("Two-factor authentication is on.",true)})}},["Verify and turn on"]),
+el("button",{class:"btn alt",onclick:function(){act(async function(){var id=mfaEnroll&&mfaEnroll.id;mfaEnroll=null;KEEP.mfacode="";
+if(id)await sb.auth.mfa.unenroll({factorId:id});say("")})}},["Cancel"])])]}
+return [el("p",{class:"empty"},["Add a second step to your login: a 6-digit code from an authenticator app on your phone."]),
+el("button",{class:"btn alt",onclick:function(){act(async function(){
+var all=await sb.auth.mfa.listFactors();
+var old=(all.data&&all.data.all||[]).filter(function(f){return f.status==="unverified"});
+for(var i=0;i<old.length;i++)await sb.auth.mfa.unenroll({factorId:old[i].id});
+var r=await sb.auth.mfa.enroll({factorType:"totp",friendlyName:"Authenticator "+Date.now()});
+if(r.error)throw new Error(/disabled|not enabled|enroll/i.test(r.error.message||"")?"Two-factor isn’t switched on in Supabase yet. Turn on TOTP in Authentication settings, then try again.":r.error.message);
+mfaEnroll={id:r.data.id,qr:r.data.totp.qr_code,secret:r.data.totp.secret}})}},["Turn on two-factor"])]}
 function settingsPage(){
 var np=el("input",{type:"password",placeholder:"New password (at least 6 characters)","aria-label":"New password",autocomplete:"new-password"});
 var nn=el("input",{value:nm(me.id),maxlength:"60",placeholder:"Full name","aria-label":"Full name",autocomplete:"name"});
@@ -429,9 +479,10 @@ el("h3",{class:"sub"},["Change password"]),np,
 el("button",{class:"btn alt",onclick:function(){act(async function(){
 if(np.value.length<6)throw new Error("Use at least 6 characters.");
 var r=await sb.auth.updateUser({password:np.value});if(r.error)throw r.error;say("Password changed.",true)})}},["Change password"]),
+el("h3",{class:"sub"},["Two-factor authentication"])].concat(mfaBlock()).concat([
 el("h3",{class:"sub"},["Devices"]),
 el("p",{class:"empty"},["Signed in somewhere you don\u2019t use anymore? This logs you out everywhere except this device."]),
-el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.auth.signOut({scope:"others"});if(r.error)throw r.error;say("Logged out of all other devices.",true)})}},["Log out other devices"])];
+el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.auth.signOut({scope:"others"});if(r.error)throw r.error;say("Logged out of all other devices.",true)})}},["Log out other devices"])]);
 var priv=[
 el("h3",{class:"sub"},["Blocked people"]),
 el("div",{},D.blocked.length?D.blocked.map(function(id){return el("div",{class:"row",style:"margin-bottom:8px"},[av(id),el("span",{},[nm(id)]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])])}):[el("p",{class:"empty"},["You haven’t blocked anyone."])]),
@@ -1030,12 +1081,12 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu()});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
 setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
-if(!me)return;
+if(!me||needMfa)return;
 var r=await sb.from("notifications").select("id",{count:"exact",head:true}).eq("read",false);
 var b=document.getElementById("bell");
 if(b&&!r.error)b.textContent="Notifications"+(r.count?" ("+r.count+")":"")},30000);
