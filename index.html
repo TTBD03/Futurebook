@@ -381,7 +381,7 @@ var SUPABASE_KEY="sb_publishable_iB2bMJMLJuP5gE4pAdDvyg_Lo2jptUN";
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 var COLORS=["#3030e8","#e8453c","#0f9d73","#c2410c","#7c3aed","#0e7490"];
 var root=document.getElementById("app");
-var me=null,D=null,needMfa=false,mfaF=[],mfaEnroll=null,showNotes=false,showSettings=false,recovering=/type=recovery/.test(location.hash),mode="up",notice={text:"",ok:false};
+var me=null,D=null,needMfa=false,mfaF=[],mfaEnroll=null,showNotes=false,showSettings=false,recovering=/type=recovery/.test(location.hash),mode="up",notice={text:"",ok:false},loadError=null,loadingData=false;
 
 function el(tag,attrs,kids){var e=document.createElement(tag);for(var k in attrs||{}){if(k==="class")e.className=attrs[k];else if(k.slice(0,2)==="on")e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!==null)e.setAttribute(k,attrs[k])}
 (kids||[]).forEach(function(c){e.appendChild(typeof c==="string"?document.createTextNode(c):c)});return e}
@@ -391,10 +391,11 @@ function nm(id){var p=D&&D.names[id];return p||"Someone"}
 function av(id){var pic=D&&D.avatars&&D.avatars[id];if(pic)return el("img",{class:"av",src:pic,alt:""});var h=0;for(var i=0;i<id.length;i++)h=(h+id.charCodeAt(i))%COLORS.length;var e=el("div",{class:"av"},[nm(id).charAt(0).toUpperCase()]);e.style.background=COLORS[h];return e}
 async function act(fn){try{await fn()}catch(e){say(e.message||"Something went wrong. Try again.")}await refresh()}
 
-async function likesQ(){
-var x=await sb.from("likes").select("post_id,user_id,reaction");
+async function likesQ(ids){
+if(!ids||!ids.length)return {data:[],error:null};
+var x=await sb.from("likes").select("post_id,user_id,reaction").in("post_id",ids);
 if(!x.error)return x;
-return sb.from("likes").select("post_id,user_id")}
+return sb.from("likes").select("post_id,user_id").in("post_id",ids)}
 
 async function postsQ(col,val){
 var sets=["id,user_id,body,image_path,caption,visibility,shared_from_user,location_name,extra,pinned,comments_off,scheduled_at,edited,created_at","id,user_id,body,image_path,caption,visibility,shared_from_user,location_name,created_at","id,user_id,body,image_path,caption,visibility,shared_from_user,created_at","id,user_id,body,image_path,caption,created_at","id,user_id,body,image_path,created_at"],x;
@@ -411,51 +412,75 @@ function extraQ(){var rt=route(),q=null;
 if(rt.name==="profile")q=postsQ("user_id",rt.id);else if(rt.name==="post")q=postsQ("id",rt.id);
 return q?q.then(function(x){return x.error?{data:[]}:x}):Promise.resolve({data:[]})}
 async function loadData(){
+// Load the signed-in member's relationship data first. The database must also
+// enforce equivalent RLS policies; browser-side filtering is not a security boundary.
 var r=await Promise.all([
 profilesQ(),
 postsQ(),
-likesQ(),
-sb.from("comments").select("id,post_id,user_id,body,created_at").order("created_at",{ascending:true}),
-sb.from("friendships").select("id,requester,addressee,status"),
-sb.from("blocks").select("blocked"),
-sb.from("poll_votes").select("post_id,user_id,opt").then(function(x){return x.error?{data:[]}:x}),
+sb.from("friendships").select("id,requester,addressee,status").or("requester.eq."+me.id+",addressee.eq."+me.id),
+sb.from("blocks").select("blocker,blocked").or("blocker.eq."+me.id+",blocked.eq."+me.id),
 sb.from("notifications").select("id,actor,type,post_id,read,created_at").order("created_at",{ascending:false}).limit(30),
 extraQ()]);
-for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;var NOTES=r[7],VOTES=r[6];
-var names={},avatars={},info={};r[0].data.forEach(function(p){names[p.id]=p.name;if(okStorageUrl(p.avatar_url))avatars[p.id]=p.avatar_url;
+for(var i=0;i<r.length;i++)if(r[i].error)throw r[i].error;
+var fs=r[2].data||[],blockRows=r[3].data||[],NOTES=r[4],extra=r[5];
+var blocked=[],blockedEither=[];blockRows.forEach(function(b){var other=b.blocker===me.id?b.blocked:b.blocker;if(b.blocker===me.id&&b.blocked&&blocked.indexOf(b.blocked)<0)blocked.push(b.blocked);if(other&&blockedEither.indexOf(other)<0)blockedEither.push(other)});
+var friendIds=fs.filter(function(f){return f.status==="accepted"}).map(function(f){return f.requester===me.id?f.addressee:f.requester});
+function isVisiblePost(p){
+if(!p||!p.user_id||blockedEither.indexOf(p.user_id)>-1)return false;
+if(p.user_id===me.id)return true;
+var v=p.visibility||"friends";
+if(v==="public")return true;
+if(v==="friends")return friendIds.indexOf(p.user_id)>-1;
+return false;
+}
+var names={},avatars={},info={};(r[0].data||[]).forEach(function(p){names[p.id]=p.name;if(okStorageUrl(p.avatar_url))avatars[p.id]=p.avatar_url;
 info[p.id]={username:p.username||"",bio:p.bio||"",cover:okStorageUrl(p.cover_url)?p.cover_url:"",verified:!!p.verified}});
-var blocked=r[5].data.map(function(b){return b.blocked});
-function ok(id){return blocked.indexOf(id)<0}
-var nowT=Date.now(),have={};r[1].data.forEach(function(p){have[p.id]=1});
-var more=(r[8].data||[]).filter(function(p){return !have[p.id]}).map(function(p){p._x=1;return p});
-var posts=r[1].data.concat(more).filter(function(p){return ok(p.user_id)&&(!p.scheduled_at||new Date(p.scheduled_at).getTime()<=nowT||p.user_id===me.id)});posts.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at)});
-var shown={};posts.forEach(function(p){shown[p.id]=1});
+var nowT=Date.now(),have={};(r[1].data||[]).forEach(function(p){have[p.id]=1});
+var more=(extra.data||[]).filter(function(p){return !have[p.id]}).map(function(p){p._x=1;return p});
+var posts=(r[1].data||[]).concat(more).filter(function(p){return isVisiblePost(p)&&(!p.scheduled_at||new Date(p.scheduled_at).getTime()<=nowT||p.user_id===me.id)});
+posts.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at)});
+var shown={},postIds=[];posts.forEach(function(p){shown[p.id]=1;postIds.push(p.id)});
+var related=postIds.length?await Promise.all([
+likesQ(postIds),
+sb.from("comments").select("id,post_id,user_id,body,created_at").in("post_id",postIds).order("created_at",{ascending:true}),
+sb.from("poll_votes").select("post_id,user_id,opt").in("post_id",postIds).then(function(x){return x.error?{data:[]}:x})
+]):[{data:[],error:null},{data:[],error:null},{data:[],error:null}];
+if(related[0].error)throw related[0].error;
+if(related[1].error)throw related[1].error;
 D={names:names,posts:posts,
-likes:r[2].data.filter(function(l){return ok(l.user_id)&&shown[l.post_id]}),
-comments:r[3].data.filter(function(c){return ok(c.user_id)&&shown[c.post_id]}),
-fs:r[4].data,blocked:blocked,avatars:avatars,info:info,imgs:{},
-votes:VOTES.data,notes:NOTES.data.filter(function(n){return ok(n.actor)})};
+likes:(related[0].data||[]).filter(function(l){return shown[l.post_id]&&blocked.indexOf(l.user_id)<0}),
+comments:(related[1].data||[]).filter(function(c){return shown[c.post_id]&&blocked.indexOf(c.user_id)<0}),
+fs:fs,blocked:blocked,blockedEither:blockedEither,avatars:avatars,info:info,imgs:{},
+votes:related[2].data||[],notes:(NOTES.data||[]).filter(function(n){return blocked.indexOf(n.actor)<0})};
 var paths=[];D.posts.forEach(function(p){allPaths(p).forEach(function(x){paths.push(x)})});
 var now=Date.now(),need=[];
 paths.forEach(function(pt){var c=urlCache[pt];if(c&&now-c.t<45*60*1000)D.imgs[pt]=c.url;else need.push(pt)});
 if(need.length){var su=await sb.storage.from("post-images").createSignedUrls(need,3600);
 if(!su.error)su.data.forEach(function(x){if(x.signedUrl){urlCache[x.path]={url:x.signedUrl,t:now};D.imgs[x.path]=x.signedUrl}})}}
-
 async function refresh(){
-var s=(await sb.auth.getSession()).data.session;
+var sessionResult=await sb.auth.getSession();
+var s=sessionResult&&sessionResult.data?sessionResult.data.session:null;
 me=s?s.user:null;needMfa=false;
-if(me){try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}}
-if(me&&!needMfa){try{await loadData()}catch(e){say("Couldn’t load your data: "+e.message)}
-try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}}
+if(!me){D=null;loadError=null;loadingData=false;draw();return}
+try{var aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(aal.data&&aal.data.nextLevel==="aal2"&&aal.data.currentLevel!=="aal2")needMfa=true}catch(e){}
+if(me&&!needMfa){loadingData=true;loadError=null;if(!D)draw();
+try{await loadData();loadError=null;if(notice.text.indexOf("Couldn’t load your data:")===0)say("")}catch(e){loadError=e&&e.message?e.message:"Unknown loading error";say("Couldn’t load your data: "+loadError)}
+try{var lf=await sb.auth.mfa.listFactors();mfaF=(lf.data&&lf.data.totp)||[]}catch(e){mfaF=[]}
+loadingData=false}
 draw();if(me&&!needMfa){checkMsgs();liveMsgs();presOn()}}
 
 var KEEP={};
+function loadState(){
+var title=loadError?"Couldn’t load Futurebook":"Loading Futurebook…";
+var detail=loadError||"Please wait while your account data is loaded.";
+var kids=[el("div",{class:"logo"},["Futurebook"]),el("div",{class:"card"},[el("h2",{},[title]),el("p",{class:"empty"},[detail])])];
+if(loadError)kids[1].appendChild(el("button",{class:"btn",type:"button",onclick:function(){refresh()}},["Try again"]));
+return el("main",{class:"auth"},kids)}
 function draw(){var y=window.scrollY;
 if(me&&D)[].forEach.call(root.querySelectorAll("[data-k]"),function(n){KEEP[n.getAttribute("data-k")]=n.value});
-root.innerHTML="";root.appendChild(recovering?resetForm():(me&&needMfa?mfaForm():(me&&D?feed():auth())));
+root.innerHTML="";root.appendChild(recovering?resetForm():(me&&needMfa?mfaForm():(me&&loadError?loadState():(me&&D?feed():(me?loadState():auth())))));
 [].forEach.call(root.querySelectorAll("[data-k]"),function(n){var v=KEEP[n.getAttribute("data-k")];if(v)n.value=v});
 if(y)window.scrollTo(0,y)}
-
 function msgEl(){return el("p",{class:"msg"+(notice.ok?" ok":""),role:"alert"},[notice.text])}
 function auth(){
 var name=el("input",{placeholder:"Full name","aria-label":"Full name",autocomplete:"name"});
@@ -507,7 +532,7 @@ say("");await refresh()
 }catch(e){say(e.message);draw()}
 }},["Verify"]);
 code.addEventListener("keydown",function(e){if(e.key==="Enter")go.click()});
-var out=el("button",{class:"link",onclick:async function(){await sb.auth.signOut({scope:"local"})}},["Log out"]);
+var out=el("button",{class:"link",onclick:async function(){try{await signOutSafely({scope:"local"})}catch(e){say(e.message||"Couldn’t log out.");draw()}}},["Log out"]);
 return el("main",{class:"auth"},[el("div",{class:"logo"},["Futurebook"]),el("p",{},["Two-factor authentication: open your authenticator app and enter the 6-digit code for Futurebook."]),
 el("div",{class:"card"},[code,msgEl(),el("div",{class:"row"},[go,out])])])}
 
@@ -556,7 +581,7 @@ nav("#messages","Messages"+(mUnread?" ("+mUnread+")":""),"msgbell",r.name==="mes
 nav("#notifications","Notifications"+(n?" ("+n+")":""),"bell",r.name==="notifications"),
 nav("#profile","Profile",null,r.name==="profile"&&r.id===me.id),
 nav("#settings","Settings",null,r.name==="settings"),
-el("button",{class:"link",onclick:async function(){await sb.auth.signOut();D=null;say("");location.hash="";await refresh()}},["Log out"])])])}
+el("button",{class:"link",onclick:async function(){try{say("");await signOutSafely();D=null;location.hash="";await refresh()}catch(e){say(e.message||"Couldn’t log out.");draw()}}},["Log out"])])])}
 function notesPage(){
 var txt={friend_request:"sent you a friend request.",friend_accept:"accepted your friend request.",like:"reacted to your post.",comment:"commented on your post."};
 var fresh=D.notes.filter(function(n){return !n.read}).map(function(n){return n.id});
@@ -566,8 +591,8 @@ items=items.concat(D.notes.map(function(n){
 var href=(n.type==="friend_request"||n.type==="friend_accept")?"#profile/"+n.actor:(n.post_id?"#post/"+n.post_id:"#home");
 return el("a",{href:href,class:"row note"+(fresh.indexOf(n.id)>-1?" unread":"")},[av(n.actor),
 el("span",{},[el("b",{},[nmv(n.actor)])," "+(txt[n.type]||"did something."),el("small",{class:"when"},[ago(n.created_at)])])])}));
-if(fresh.length){sb.from("notifications").update({read:true}).eq("read",false).then(function(r){
-if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
+if(fresh.length){var freshIds=fresh.slice();sb.from("notifications").update({read:true}).in("id",freshIds).eq("read",false).then(function(r){
+if(r.error)return;var readSet={};freshIds.forEach(function(id){readSet[id]=1});D.notes.forEach(function(n){if(readSet[n.id])n.read=true});var b=document.getElementById("bell");if(b)b.textContent="Notifications"})}
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes, comments and messages will show up here."])]))}
 var stab="account";
 function alertBlock(){
@@ -635,7 +660,7 @@ el("h3",{class:"sub"},["Deactivate account"]),
 el("p",{class:"empty"},["Hides your profile and posts from everyone. Log in again any time to bring it back."]),
 el("button",{class:"btn alt",onclick:function(){if(!confirm("Deactivate your account?"))return;
 act(async function(){var r=await sb.from("profiles").update({deactivated:true}).eq("id",me.id);if(r.error)throw r.error;
-await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account is deactivated. Log in any time to reactivate it.",true)})}},["Deactivate my account"]),
+await stopLiveSharesBeforeSignOut();await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account is deactivated. Log in any time to reactivate it.",true)})}},["Deactivate my account"]),
 el("h3",{class:"sub"},["Delete account"]),
 el("p",{class:"empty"},["Permanently deletes your account, posts, photos, comments and friendships. This can’t be undone."]),conf,
 el("button",{class:"btn",onclick:function(){
@@ -644,7 +669,7 @@ act(async function(){
 var buckets=["post-images","avatars","covers","message-media"];
 for(var i=0;i<buckets.length;i++){var l=await sb.storage.from(buckets[i]).list(me.id);
 if(!l.error&&l.data&&l.data.length)await sb.storage.from(buckets[i]).remove(l.data.map(function(f){return me.id+"/"+f.name}))}
-var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
+await stopLiveSharesBeforeSignOut();var r=await sb.rpc("delete_my_account");if(r.error)throw r.error;
 await sb.auth.signOut({scope:"local"});D=null;history.replaceState(null,"",location.pathname+location.search);say("Your account has been deleted.",true)})}},["Delete my account"])]);
 var sec=[
 el("h3",{class:"sub"},["Change password"]),np,
@@ -760,16 +785,19 @@ var opts=po.map(function(i){return i.value.trim()}).filter(Boolean),pollOn=pq.va
 if(!v&&!f&&!vf&&!gv&&!lk&&!pollOn&&!loc.value.trim())return;
 if(vf&&vf.size>50*1024*1024){say("That video is over 50 MB.");draw();return}
 var sched=when.value?new Date(when.value):null;if(sched&&isNaN(sched))sched=null;
-act(async function(){var path=null,ex={};
-if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error;
-for(var k=1;k<fs.length;k++){var b2=await shrink(fs[k],1280),p2=me.id+"/"+Date.now()+"_"+k+".jpg";var u2=await sb.storage.from("post-images").upload(p2,b2,{contentType:"image/jpeg"});if(u2.error)throw u2.error;(ex.more=ex.more||[]).push(p2)}}
-if(vf){var ext=/mp4/.test(vf.type)?"mp4":/quicktime/.test(vf.type)?"mov":"webm";var vp=me.id+"/"+Date.now()+"v."+ext;var uv=await sb.storage.from("post-images").upload(vp,vf,{contentType:vf.type||"video/webm"});if(uv.error)throw uv.error;ex.video=vp;if(liveBlob&&vf===liveBlob)ex.live=1}
+act(async function(){var path=null,ex={},uploaded=[];
+try{
+if(f){var b=await shrink(f,1280);path=me.id+"/"+Date.now()+".jpg";var up=await sb.storage.from("post-images").upload(path,b,{contentType:"image/jpeg"});if(up.error)throw up.error;uploaded.push(path);
+for(var k=1;k<fs.length;k++){var b2=await shrink(fs[k],1280),p2=me.id+"/"+Date.now()+"_"+k+".jpg";var u2=await sb.storage.from("post-images").upload(p2,b2,{contentType:"image/jpeg"});if(u2.error)throw u2.error;uploaded.push(p2);(ex.more=ex.more||[]).push(p2)}}
+if(vf){var ext=/mp4/.test(vf.type)?"mp4":/quicktime/.test(vf.type)?"mov":"webm";var vp=me.id+"/"+Date.now()+"v."+ext;var uv=await sb.storage.from("post-images").upload(vp,vf,{contentType:vf.type||"video/webm"});if(uv.error)throw uv.error;uploaded.push(vp);ex.video=vp;if(liveBlob&&vf===liveBlob)ex.live=1}
 if(feel.value)ex.feel=feel.value;var tg2=[].filter.call(tags.options,function(o){return o.selected}).map(function(o){return o.value});if(tg2.length)ex.tags=tg2;
 if(lk)ex.link=lk;if(gv)ex.gif=gv;if(bg&&!path&&!vf&&!gv)ex.bg=bg;if(pollOn)ex.poll={q:pq.value.trim(),o:opts};
-var row={user_id:me.id,body:v||" ",image_path:path},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);if(aud.value==="public")row.visibility="public";var lv=loc.value.trim();if(lv)row.location_name=lv.slice(0,120);
+var row={user_id:me.id,body:v||" ",image_path:path,visibility:aud.value},c=cap.value.trim();if(path&&c)row.caption=c.slice(0,300);var lv=loc.value.trim();if(lv)row.location_name=lv.slice(0,120);
 if(Object.keys(ex).length)row.extra=ex;if(sched&&sched.getTime()>Date.now())row.scheduled_at=sched.toISOString();
-var r=await sb.from("posts").insert(row);
-if(r.error)throw dbErr(r.error);ta.value="";say(row.scheduled_at?"Post scheduled for "+sched.toLocaleString()+".":"",!!row.scheduled_at)})}},["Post"])]));
+var r=await sb.from("posts").insert(row);if(r.error)throw dbErr(r.error);
+ta.value="";say(row.scheduled_at?"Post scheduled for "+sched.toLocaleString()+".":"",!!row.scheduled_at)
+}catch(e){if(uploaded.length){try{await sb.storage.from("post-images").remove(uploaded)}catch(cleanErr){}}throw e}
+})}},["Post"])]));
 var feedPosts=D.posts.filter(function(p){return !p._x});
 var list=el("div",{},feedPosts.length?feedPosts.map(function(p){return post(p)}):[el("p",{class:"empty"},["No posts yet. Write your first post or add friends."])]);
 return el("div",{},[box,list])}
@@ -782,7 +810,7 @@ say(nm(id)+" is unblocked. Send a new friend request if you want to reconnect.",
 function friendActions(id){
 var f=D.fs.filter(function(x){return (x.requester===me.id&&x.addressee===id)||(x.requester===id&&x.addressee===me.id)})[0];
 function del(label,ask){return el("button",{class:"btn alt",onclick:function(){if(ask&&!confirm(ask))return;act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},[label])}
-if(D.blocked.indexOf(id)>-1)return [el("span",{class:"badge"},["Blocked"]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])];
+if(D.blockedEither.indexOf(id)>-1)return D.blocked.indexOf(id)>-1?[el("span",{class:"badge"},["Blocked"]),el("button",{class:"btn alt",onclick:function(){unblock(id)}},["Unblock"])]:[el("span",{class:"badge"},["Unavailable"])];
 if(!f)return [el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])];
 if(f.status==="accepted")return [el("span",{class:"badge"},["Friends"]),el("a",{href:"#messages/"+id,class:"btn"},["Message"]),del("Unfriend","Remove "+nm(id)+" from your friends?")];
 if(f.requester===me.id)return [el("span",{class:"badge"},["Request sent"]),del("Cancel request",null)];
@@ -808,10 +836,20 @@ var r=await sb.rpc("get_profile_extras",{target:id});
 if(!r.error&&r.data){var o=r.data;
 X[id]={d:{education:o.education,workplace:o.workplace,current_city:o.current_city,hometown:o.hometown,relationship_status:o.relationship_status,website:o.website},
 c:{contact_email:o.contact_email,phone:o.phone},pv:o.privacy||{},priv:true}}
-else{
-var d=await sb.from("profile_details").select("education,workplace,current_city,hometown,relationship_status,website").eq("user_id",id).maybeSingle();
-var c=await sb.from("profile_contact").select("contact_email,phone").eq("user_id",id).maybeSingle();
-X[id]={d:d.error?null:d.data,c:c.error?null:c.data,fail:!!d.error,priv:false}}
+else if(id===me.id){
+// Direct reads are safe only for the signed-in owner's own records.
+var pair=await Promise.all([
+sb.from("profile_details").select("education,workplace,current_city,hometown,relationship_status,website,privacy").eq("user_id",id).maybeSingle(),
+sb.from("profile_contact").select("contact_email,phone").eq("user_id",id).maybeSingle()]);
+if(pair[0].error&&/privacy/i.test(pair[0].error.message||"")){
+var legacy=await sb.from("profile_details").select("education,workplace,current_city,hometown,relationship_status,website").eq("user_id",id).maybeSingle();
+if(legacy.error||pair[1].error)throw legacy.error||pair[1].error;
+X[id]={d:legacy.data||{},c:pair[1].data||{},pv:{},priv:false};
+}else{
+if(pair[0].error||pair[1].error)throw pair[0].error||pair[1].error;
+X[id]={d:pair[0].data||{},c:pair[1].data||{},pv:(pair[0].data&&pair[0].data.privacy)||{},priv:true};
+}
+}else{X[id]={d:null,c:null,fail:true}}
 }catch(e){X[id]={d:null,c:null,fail:true}}
 draw()}
 function coverInput(){return el("input",{type:"file",id:"coverfile",accept:"image/jpeg,image/png,image/webp","aria-label":"Choose a cover photo",style:"display:none",onchange:function(e){var f=e.target.files[0];if(!f)return;
@@ -916,7 +954,7 @@ var t=c.currentTime;
 o.type="sine";o.frequency.value=n[0];
 g.gain.setValueAtTime(.0001,a);g.gain.exponentialRampToValueAtTime(.22,a+.02);g.gain.exponentialRampToValueAtTime(.0001,a+.4);
 o.connect(g);g.connect(c.destination);o.start(a);o.stop(a+.45)})}
-function soundFor(rows){var f=false;rows.forEach(function(m){if(m&&m.id&&!dinged[m.id]){dinged[m.id]=1;if(!(D&&D.blocked&&D.blocked.indexOf(m.sender)>-1))f=true}});if(f)ding()}
+function soundFor(rows){var f=false;rows.forEach(function(m){if(m&&m.id&&!dinged[m.id]){dinged[m.id]=1;if(!(D&&D.blockedEither&&D.blockedEither.indexOf(m.sender)>-1))f=true}});if(f)ding()}
 var seenM=null;
 var animSeen={},animFor=null;
 var ICO={back:'<path d="M15 5l-7 7 7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',send:'<path d="M12 19V5M5 12l7-7 7 7"/>'};
@@ -972,8 +1010,10 @@ async function liveStop(sid,quiet){
 var s=liveShares[sid];if(!s)return;
 if(s.watch!=null&&navigator.geolocation)navigator.geolocation.clearWatch(s.watch);
 clearTimeout(s.tm);delete liveShares[sid];livePaintBar();
-if(!quiet){try{await sb.from("live_locations").update({stopped:true}).eq("id",sid)}catch(e){}}}
+if(!quiet){try{var r=await sb.from("live_locations").update({stopped:true}).eq("id",sid);if(r.error)say("Location tracking stopped on this device, but the server could not update the share status.")}catch(e){say("Location tracking stopped on this device, but the server could not update the share status.")}}}
 function liveStopAll(quiet){Object.keys(liveShares).forEach(function(k){liveStop(k,quiet)})}
+async function stopLiveSharesBeforeSignOut(){var ids=Object.keys(liveShares);for(var i=0;i<ids.length;i++)await liveStop(ids[i])}
+async function signOutSafely(options){await stopLiveSharesBeforeSignOut();var r=await sb.auth.signOut(options);if(r&&r.error)throw r.error}
 function liveUpdate(sid,pos){
 var s=liveShares[sid];if(!s)return;var now=Date.now();
 if(now>=s.exp){liveStop(sid);return}
@@ -1187,10 +1227,10 @@ try{
 var cols=["id,sender,recipient,body,created_at,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at"],r;
 for(var ci=0;ci<cols.length;ci++){r=await sb.from("messages").select(cols[ci],{count:"exact"}).eq("recipient",me.id).eq("read",false).order("created_at",{ascending:false}).limit(30);if(!r.error)break}
 if(r.error)return;
-var rows=(r.data||[]).filter(function(m){return !(D&&D.blocked&&D.blocked.indexOf(m.sender)>-1)});
+var rows=(r.data||[]).filter(function(m){return !(D&&D.blockedEither&&D.blockedEither.indexOf(m.sender)>-1)});
 mUnread=rows.length>=30?(r.count||rows.length):rows.length;
 var fresh=seenM===null?[]:rows.filter(function(m){return !seenM[m.id]});
-if(seenM===null){seenM={};try{sb.from("live_locations").update({stopped:true}).eq("sender",me.id).eq("stopped",false).then(function(){},function(){})}catch(e){}}
+if(seenM===null){seenM={}}
 rows.forEach(function(m){seenM[m.id]=1});
 markDelivered(rows);
 paintBell();
@@ -1208,7 +1248,7 @@ if(!r.error){mUnread=r.count||0;paintBell()}}catch(e){}}
 async function loadMsgs(){
 if(M.busy||!me)return;M.busy=true;
 try{var sets=["id,sender,recipient,body,created_at,read,delivered,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at,read,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at,read"],r;
-for(var si=0;si<sets.length;si++){r=await sb.from("messages").select(sets[si]).order("created_at",{ascending:false}).limit(1000);if(!r.error)break}
+for(var si=0;si<sets.length;si++){r=await sb.from("messages").select(sets[si]).or("sender.eq."+me.id+",recipient.eq."+me.id).order("created_at",{ascending:false}).limit(1000);if(!r.error)break}
 if(r.error){M.err=r.error.message||"error";M.list=[]}else{M.err=null;M.list=r.data.reverse()}M.loaded=true}
 catch(e){M.err=e.message||"error";M.loaded=true}
 M.busy=false;
@@ -1305,7 +1345,7 @@ if(!r.id){
 var by={};
 all.forEach(function(m){var o=m.sender===me.id?m.recipient:m.sender;var c=by[o]||(by[o]={id:o,last:null,unread:0});c.last=m;if(m.recipient===me.id&&!m.read)c.unread++});
 D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===me.id?f.addressee:f.requester;if(D.names[o]&&!by[o])by[o]={id:o,last:null,unread:0}});
-var rows=Object.keys(by).map(function(k){return by[k]}).filter(function(c){return D.blocked.indexOf(c.id)<0}).sort(function(a,b){
+var rows=Object.keys(by).map(function(k){return by[k]}).filter(function(c){return D.blockedEither.indexOf(c.id)<0}).sort(function(a,b){
 if(a.last&&b.last)return new Date(b.last.created_at)-new Date(a.last.created_at);if(a.last)return -1;if(b.last)return 1;return nm(a.id).localeCompare(nm(b.id))});
 var sig="L"+rows.map(function(c){return c.id+(c.last?c.last.id:"")+c.unread}).join("|");
 if(box.getAttribute("data-sig")===sig)return;box.setAttribute("data-sig",sig);box.innerHTML="";
@@ -1409,7 +1449,7 @@ return el("div",{class:"card chatcard"},kids)}
 function friendsOf(id){
 var seen={};
 D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===id?f.addressee:(f.addressee===id?f.requester:null);
-if(o&&D.names[o]&&D.blocked.indexOf(o)<0)seen[o]=f});
+if(o&&D.names[o]&&D.blockedEither.indexOf(o)<0)seen[o]=f});
 return Object.keys(seen).map(function(o){return {id:o,f:seen[o]}})}
 function profileTabs(id,n){
 function tab(key,label){return el("button",{type:"button",role:"tab","aria-selected":String(ptab===key),onclick:function(){ptab=key;draw()}},[label])}
@@ -1532,7 +1572,7 @@ async function doShare(p,aud){if(aud==="public"&&p.visibility!=="public")aud="fr
 var path=null;
 if(p.image_path){path=me.id+"/"+Date.now()+".jpg";var cp=await sb.storage.from("post-images").copy(p.image_path,path);if(cp.error)throw cp.error}
 var row={user_id:me.id,body:p.body||" ",image_path:path,shared_from_user:p.shared_from_user||p.user_id};
-if(p.caption)row.caption=p.caption;if(aud==="public")row.visibility="public";
+if(p.caption)row.caption=p.caption;row.visibility=aud;
 var r=await sb.from("posts").insert(row);
 if(r.error){if(path)await sb.storage.from("post-images").remove([path]);throw dbErr(r.error)}}
 function shareDlg(p){
@@ -1630,7 +1670,7 @@ var linked={};D.fs.forEach(function(f){linked[f.requester===me.id?f.addressee:f.
 var reqs=incoming.map(function(f){return el("div",{class:"row"},[av(f.requester),el("a",{class:"nm",href:"#profile/"+f.requester},[nmv(f.requester)]),
 el("button",{class:"btn",onclick:function(){act(async function(){var r=await sb.from("friendships").update({status:"accepted"}).eq("id",f.id);if(r.error)throw r.error})}},["Accept"]),
 el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").delete().eq("id",f.id);if(r.error)throw r.error})}},["Decline"])])});
-var others=Object.keys(D.names).filter(function(id){return id!==me.id&&!linked[id]&&D.blocked.indexOf(id)<0}).map(function(id){
+var others=Object.keys(D.names).filter(function(id){return id!==me.id&&!linked[id]&&D.blockedEither.indexOf(id)<0}).map(function(id){
 return el("div",{class:"row"},[av(id),el("a",{class:"nm",href:"#profile/"+id},[nmv(id)]),el("button",{class:"btn alt",onclick:function(){act(async function(){var r=await sb.from("friendships").insert({requester:me.id,addressee:id});if(r.error)throw r.error})}},["Add friend"])])});
 var sent=D.fs.filter(function(f){return f.requester===me.id&&f.status==="pending"&&D.names[f.addressee]}).map(function(f){
 return el("div",{class:"row"},[av(f.addressee),el("span",{},[el("a",{class:"nm",href:"#profile/"+f.addressee},[nmv(f.addressee)])," (request sent)"])])});
@@ -1649,7 +1689,7 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeMenu();closeSheet()}});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;liveMsgsOff();presOff();closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;loadError=null;loadingData=false;liveMsgsOff();presOff();closePops();closeSheet();liveStopAll(true);document.title="Futurebook";KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
 setInterval(function(){if(document.hidden&&(++hidTick%6))return;checkMsgs()},5000);
