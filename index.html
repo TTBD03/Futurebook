@@ -252,6 +252,82 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 .mrow.me{flex-direction:row-reverse;align-self:flex-end}
 .mrow .mb{align-self:auto;max-width:calc(100% - 38px);min-width:0}
 .mst{display:block;opacity:.75;font-size:.7rem;margin-top:2px}
+
+/* ===== modern messaging ===== */
+:root{--ease:cubic-bezier(.22,1,.36,1)}
+.ic{display:inline-flex}.ic svg{display:block}
+.chatcard{display:flex;flex-direction:column;height:min(78dvh,780px);min-height:420px;padding:0;overflow:hidden;border-radius:20px;box-shadow:0 12px 40px -20px rgba(20,20,70,.45)}
+.chatcard #mbody{flex:1;min-height:0;display:flex;flex-direction:column}
+.chead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card);background:color-mix(in srgb,var(--card) 82%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.chead .nm{margin:0;font:700 1.05rem "Bricolage Grotesque",Figtree,sans-serif}
+.cback{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--mute);text-decoration:none;transition:background-color .2s,color .2s,transform .25s var(--ease)}
+.cback:hover{background:var(--soft);color:var(--pri);transform:translateX(-2px)}
+.chatcard .mlist{flex:1;min-height:0;max-height:none;padding:14px 14px 6px;gap:2px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.mday{align-self:center;margin:12px 0 8px}
+.mday span{display:inline-block;background:var(--bg);color:var(--mute);font-size:.72rem;font-weight:600;padding:3px 12px;border-radius:999px}
+.mrow{max-width:min(84%,540px);gap:8px}
+.mrow:not(.cont){margin-bottom:8px}
+.mcol{display:flex;flex-direction:column;min-width:0;align-items:flex-start}
+.mrow.me .mcol{align-items:flex-end}
+.avgap{width:28px;flex:none}
+.mrow .mb{max-width:100%;padding:9px 14px;border-radius:20px 20px 20px 6px;background:var(--soft);line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.mrow.cont .mb{border-bottom-left-radius:20px}
+.mrow.me .mb{border-radius:20px 20px 6px 20px;background:var(--pri);background:linear-gradient(135deg,var(--pri),color-mix(in srgb,var(--pri) 60%,#a855f7));color:var(--onpri)}
+.mrow.me.cont .mb{border-bottom-right-radius:20px}
+.mrow .mb.pm{padding:4px}
+.mb.pm .mcap{display:block;padding:6px 10px 4px}
+.mb.pm .mimg,.mb.pm .mvid{border-radius:16px}
+.mmeta{color:var(--mute);font-size:.7rem;margin:3px 6px 0}
+.mrow .mb.wait{opacity:.65}
+.mrow.in{animation:mIn .4s var(--ease) both;transform-origin:left bottom}
+.mrow.me.in{transform-origin:right bottom}
+@keyframes mIn{from{opacity:0;transform:translateY(12px) scale(.94)}to{opacity:1;transform:none}}
+.mempty{margin:auto;text-align:center;color:var(--mute);display:grid;gap:4px;justify-items:center}
+.mempty b{color:var(--ink)}
+.mwave{font-size:2.6rem;display:inline-block;transform-origin:70% 70%;animation:mwave 2.4s ease-in-out infinite}
+@keyframes mwave{0%,60%,100%{transform:none}10%,30%{transform:rotate(16deg)}20%,40%{transform:rotate(-10deg)}50%{transform:rotate(8deg)}}
+.mcwrap{position:relative;padding:8px 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.mtray{position:absolute;left:12px;right:12px;bottom:calc(100% - 4px);display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(10,10,40,.22);opacity:0;visibility:hidden;transform:translateY(10px) scale(.97);transform-origin:left bottom;transition:opacity .2s,transform .3s var(--ease),visibility 0s .3s;z-index:3}
+.mcwrap.open .mtray{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.mchip{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border:0;border-radius:999px;padding:7px 13px;font-weight:600;font-size:.88rem}
+.mchip:hover{background:var(--line)}
+.mci{font-size:1.05rem;line-height:1}
+.mcwrap .mcomp{display:flex;flex-wrap:nowrap;align-items:flex-end;gap:4px;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:26px;padding:5px;transition:border-color .2s,box-shadow .2s}
+.mcwrap .mcomp:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--soft);box-shadow:0 0 0 4px color-mix(in srgb,var(--pri) 18%,transparent)}
+.mcomp textarea{flex:1;min-width:0;width:auto;height:40px;max-height:140px;border:0;background:transparent;margin:0;padding:9px 6px;resize:none;line-height:1.4;outline:none;overflow-y:auto}
+.mplus,.msend{width:40px;height:40px;border-radius:50%;border:0;display:grid;place-items:center;flex:none;padding:0}
+.mplus{background:transparent;color:var(--mute);transition:transform .3s var(--ease),background-color .2s,color .2s}
+.mplus:hover{background:var(--soft)}
+.mcwrap.open .mplus{transform:rotate(45deg);background:var(--soft);color:var(--pri)}
+.msend{background:var(--pri);color:var(--onpri);transition:transform .25s var(--ease),opacity .2s}
+.msend:disabled{opacity:.35;transform:scale(.86);cursor:default}
+.msend:not(:disabled):hover{transform:scale(1.07)}
+.msend:not(:disabled):active{transform:scale(.92)}
+.chatcard .mrec{margin:0 12px 8px;padding:8px 14px;border-radius:16px;background:var(--bg)}
+.mrec>span:first-child{animation:rblink 1.1s ease-in-out infinite}
+@keyframes rblink{50%{opacity:.3}}
+.chatcard .mstage{margin:0 12px 8px;border-radius:16px;background:var(--bg);animation:mIn .3s var(--ease)}
+.chatcard .msg{margin:4px 14px 0;min-height:0}
+.chatcard .empty{padding:0 14px}
+#mbody a.note{transition:background-color .15s,transform .2s var(--ease)}
+#mbody a.note:hover{background:var(--soft);transform:translateX(2px)}
+/* popup chat */
+.cp{border-radius:18px 18px 0 0;box-shadow:0 12px 44px -8px rgba(10,10,40,.5);animation:cpIn .45s var(--ease) both}
+@keyframes cpIn{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+.cph{background:var(--pri);background:linear-gradient(135deg,var(--pri),color-mix(in srgb,var(--pri) 60%,#a855f7));padding:10px 12px}
+.cph a:hover,.cph button:hover{background:rgba(255,255,255,.2);border-radius:8px}
+.cpb{max-height:260px;padding:10px 12px;scroll-behavior:smooth;scrollbar-width:thin}
+.cp .b{border-radius:18px 18px 18px 6px;padding:7px 12px;line-height:1.35}
+.cp .b.me{border-radius:18px 18px 6px 18px;background:var(--pri);background:linear-gradient(135deg,var(--pri),color-mix(in srgb,var(--pri) 60%,#a855f7));color:var(--onpri)}
+.cp .brow.pin{animation:mIn .32s var(--ease) both}
+.cpf{align-items:center;padding:8px 10px 10px}
+.cpf input{border-radius:999px;margin:0;padding:9px 14px;transition:border-color .2s,box-shadow .2s}
+.cpf input:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--soft)}
+.cpf .msend{width:36px;height:36px}
+.cpx .btn{background:transparent;border-radius:10px;padding:5px 9px}
+.cpx .btn:hover{background:var(--soft)}
+@media(max-width:760px){.chatcard{height:calc(100dvh - 175px);border-radius:18px}.mrow{max-width:90%}.mtray{left:8px;right:8px}}
+@media (prefers-reduced-motion:reduce){.mrow.in,.cp,.cp .brow.pin,.mwave,.chatcard .mstage,.mrec>span:first-child{animation:none!important}.mtray,.msend,.mplus,.cback{transition:none!important}}
 </style>
 </head>
 <body>
@@ -728,6 +804,10 @@ return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("d
 var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnread=0;
 function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"");document.title=(mUnread&&me?"("+mUnread+") ":"")+"Futurebook"}
 var seenM=null;
+var animSeen={},animFor=null;
+var ICO={back:'<path d="M15 5l-7 7 7 7"/>',plus:'<path d="M12 5v14M5 12h14"/>',send:'<path d="M12 19V5M5 12l7-7 7 7"/>'};
+function ico(n){var e=document.createElement("span");e.className="ic";e.setAttribute("aria-hidden","true");e.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'+ICO[n]+'</svg>';return e}
+function dayLabel(d){var t=new Date(),y=new Date();y.setDate(t.getDate()-1);if(d.toDateString()===t.toDateString())return "Today";if(d.toDateString()===y.toDateString())return "Yesterday";return d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}
 /* ---- rich messages: GIF, location, live location ---- */
 /* Replace with your own free key from developers.giphy.com for reliable GIF search */
 var GIPHY_KEY="egO2CiZ7wfiVvRmwtvuOtPNGvrtOmK8M";
@@ -860,7 +940,7 @@ var rb=richBody(m);if(rb)kids.push(rb);
 if(m.sender===me.id){var st=el("small",{class:"mst"},[String(m.id).indexOf("tmp")===0?"Sending…":"✓ Sent"]);kids.push(st);p.st=p.st||{};p.st[m.id]=st}
 var node=el("div",{class:"b"+(m.sender===me.id?" me":"")},kids);
 var sa=av(m.sender);sa.classList.add("sm");
-p.body.appendChild(el("div",{class:"brow"+(m.sender===me.id?" me":"")},[sa,node]));if(p.stick)p.body.scrollTop=p.body.scrollHeight;return node}
+p.body.appendChild(el("div",{class:"brow"+(m.sender===me.id?" me":"")+(p.live?" pin":"")},[sa,node]));if(p.stick)p.body.scrollTop=p.body.scrollHeight;return node}
 function popRead(id){sb.from("messages").update({read:true}).eq("sender",id).eq("recipient",me.id).eq("read",false).then(function(r){if(!r.error)checkMsgs()})}
 async function popHistory(id){
 var cols=["id,sender,recipient,body,created_at,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at"],r;
@@ -934,7 +1014,7 @@ if(p){asc.forEach(function(m){popBubble(p,m)});popArm(p,id);return}
 if(popOrder.length>=3)closePop(popOrder[0]);
 var body=el("div",{class:"cpb","aria-live":"polite"}),err=el("small",{class:"cperr",role:"alert"},[]);
 var input=el("input",{placeholder:"Reply…","aria-label":"Reply to "+nm(id),maxlength:"2000",autocomplete:"off"});
-var send=el("button",{class:"btn",type:"button"},["Send"]);
+var send=el("button",{class:"msend",type:"button","aria-label":"Send"},[ico("send")]);
 var win=el("div",{class:"cp",role:"dialog","aria-label":"Chat with "+nm(id)});
 var head=el("div",{class:"cph"},[av(id),el("span",{class:"cpt"},[nm(id)]),
 el("a",{href:"#messages/"+id,title:"Open full chat","aria-label":"Open full chat"},["⤢"]),
@@ -963,7 +1043,7 @@ tb("GIF","Send a GIF",function(){openGif(id,{sent:function(){popRead(id);popRefr
 tb("📍","Share location",function(){openLoc(id,function(){popRefresh(p,id)})})]);
 [head,body,stage,recbar,tools,el("div",{class:"cpf"},[input,send]),err].forEach(function(n){win.appendChild(n)});
 p={el:win,body:body,ids:{},stage:stage,recbar:recbar,err:err,rec:null,stg:null,stick:true,input:input,hover:false,at:null};
-pops[id]=p;popOrder.push(id);popBox().appendChild(win);
+pops[id]=p;popOrder.push(id);popBox().appendChild(win);setTimeout(function(){p.live=true},900);
 win.addEventListener("mouseenter",function(){p.hover=true});
 win.addEventListener("mouseleave",function(){p.hover=false;popArm(p,id)});
 win.addEventListener("focusout",function(){popArm(p,id)});
@@ -1087,7 +1167,7 @@ if(kind==="audio")ext=ctype.indexOf("mp4")>-1?"m4a":ctype.indexOf("ogg")>-1?"ogg
 if(kind==="image")ext=ctype==="image/gif"?"gif":"jpg";
 var path=me.id+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext.toLowerCase();
 var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:(caption||"").slice(0,2000),media_type:kind,media_name:name,localUrl:URL.createObjectURL(file),created_at:new Date().toISOString(),read:false};
-M.pending.push(tmp);paintMsgs();
+M.force=true;M.pending.push(tmp);paintMsgs();
 try{
 var up=await sb.storage.from("message-media").upload(path,file,{contentType:ctype||"application/octet-stream"});
 if(up.error)throw up.error;
@@ -1123,25 +1203,49 @@ var id=r.id;
 var th=all.filter(function(m){return(m.sender===me.id&&m.recipient===id)||(m.sender===id&&m.recipient===me.id)});
 var sig2="T"+id+"|"+th.map(function(m){return m.id+(m.read?"r":(m.delivered?"d":"u"))}).join(",");
 if(box.getAttribute("data-sig")!==sig2){
-var prev=box.firstChild,atBottom=!prev||!prev.scrollHeight||(prev.scrollHeight-prev.scrollTop-prev.clientHeight<60);
+var prev=box.firstChild,hadList=!!(prev&&prev.classList&&prev.classList.contains("mlist")),atBottom=!hadList||(prev.scrollHeight-prev.scrollTop-prev.clientHeight<60),prevTop=hadList?prev.scrollTop:0;
+var force=M.force;M.force=false;
 box.setAttribute("data-sig",sig2);box.innerHTML="";
-var list=el("div",{class:"mlist"},th.length?th.map(function(m){var mine=m.sender===me.id;
-var bub=el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[mediaEl(m),richBody(m)||"",el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)+(mine?" · "+stText(m):"")])]);var sa=av(m.sender);sa.classList.add("sm");return el("div",{class:"mrow"+(mine?" me":"")},[sa,bub])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
-box.appendChild(list);if(atBottom)list.scrollTop=list.scrollHeight;
+if(animFor!==id){animFor=id;animSeen={};th.forEach(function(m){animSeen[m.id]=1})}
+var rowsEl=[],lastDay="";
+th.forEach(function(m,i){
+var mine=m.sender===me.id,tmpm=String(m.id).indexOf("tmp")===0,nx=th[i+1];
+var d=new Date(m.created_at),dk=d.toDateString();
+if(dk!==lastDay){lastDay=dk;rowsEl.push(el("div",{class:"mday"},[el("span",{},[dayLabel(d)])]))}
+var cont=!!nx&&nx.sender===m.sender&&new Date(nx.created_at).toDateString()===dk&&(new Date(nx.created_at)-d)<300000;
+var isNew=!animSeen[m.id];animSeen[m.id]=1;
+var anim=isNew&&(!mine||tmpm);
+var rb=richBody(m)||"",hasMedia=!!m.media_type||!!parseMark(m.body);
+var content=(m.media_type&&typeof rb==="string"&&rb.trim())?el("span",{class:"mcap"},[rb]):rb;
+var bub=el("div",{class:"mb"+(mine?" me":"")+(tmpm?" wait":"")+(hasMedia?" pm":"")},[mediaEl(m),content]);
+var col=el("div",{class:"mcol"},[bub]);
+if(!cont)col.appendChild(el("small",{class:"mmeta"},[tmpm?"Sending\u2026":d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+(mine?" \u00b7 "+stText(m):"")]));
+var kidsR=[];
+if(!mine){if(cont)kidsR.push(el("span",{class:"avgap"},[]));else{var sa=av(m.sender);sa.classList.add("sm");kidsR.push(sa)}}
+kidsR.push(col);
+rowsEl.push(el("div",{class:"mrow"+(mine?" me":"")+(cont?" cont":"")+(anim?" in":"")},kidsR))});
+var list=el("div",{class:"mlist"},rowsEl.length?rowsEl:[el("div",{class:"mempty"},[el("div",{class:"mwave"},["\ud83d\udc4b"]),el("b",{},["No messages yet"]),el("small",{},["Say hi to "+nm(id)+"!"])])]);
+box.appendChild(list);
+if(!hadList)list.scrollTop=list.scrollHeight;
+else if(atBottom||force){list.scrollTop=prevTop;if(calm())list.scrollTop=list.scrollHeight;else list.scrollTo({top:list.scrollHeight,behavior:"smooth"})}
+else list.scrollTop=prevTop;
+var stick=atBottom||force||!hadList;
+list.addEventListener("scroll",function(){stick=list.scrollHeight-list.scrollTop-list.clientHeight<60},{passive:true});
+list.addEventListener("load",function(){if(stick)list.scrollTop=list.scrollHeight},true);
 var need=th.filter(function(m){return m.media_path&&!murlGet(m.media_path)&&!(murl[m.media_path]&&murl[m.media_path].fail)}).map(function(m){return m.media_path});
 if(need.length)mediaUrls(need).then(function(ch){var b=document.getElementById("mbody");if(ch&&b){b.removeAttribute("data-sig");paintMsgs()}})}
 if(th.some(function(m){return m.sender===id&&!m.read}))markRead(id)}
 function sendMsg(id,input){
 var v=input.value.trim();if(!v)return;
 var ee=document.getElementById("merr");if(ee)ee.textContent="";
-input.value="";
+input.value="";input.dispatchEvent(new Event("input"));
 var tmp={id:"tmp"+Date.now(),sender:me.id,recipient:id,body:v.slice(0,2000),created_at:new Date().toISOString(),read:false};
-M.pending.push(tmp);paintMsgs();
+M.force=true;M.pending.push(tmp);paintMsgs();
 sb.from("messages").insert({sender:me.id,recipient:id,body:tmp.body}).then(async function(r){
 M.pending=M.pending.filter(function(x){return x!==tmp});
 if(r.error){var e2=document.getElementById("merr");
 if(e2)e2.textContent=/row-level|policy/i.test(r.error.message||"")?"You can only message your friends.":(r.error.message||"Couldn\u2019t send. Try again.");
-input.value=v;paintMsgs();return}
+input.value=v;input.dispatchEvent(new Event("input"));paintMsgs();return}
 M.busy=false;await loadMsgs();paintMsgs()})}
 function messagesPage(id){
 stopRec(false);clearStage();
@@ -1149,11 +1253,18 @@ if(!M.busy)loadMsgs().then(paintMsgs);
 var box=el("div",{id:"mbody"},[el("p",{class:"empty"},["Loading\u2026"])]);
 setTimeout(paintMsgs,0);
 if(!id)return el("div",{class:"card"},[el("h3",{style:"margin-bottom:8px"},["Messages"]),box]);
-var head=el("div",{class:"row",style:"margin-bottom:8px"},[el("a",{href:"#messages",class:"link"},["\u2190 All"]),av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
+var head=el("div",{class:"chead"},[el("a",{href:"#messages",class:"cback","aria-label":"All conversations",title:"All conversations"},[ico("back")]),av(id),el("a",{class:"nm",href:"#profile/"+id},[nm(id)])]);
 var kids=[head,box];
 if(isFriend(id)){
-var inp=el("input",{placeholder:"Write a message","aria-label":"Write a message",maxlength:"2000",autocomplete:"off"});
-inp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(id,inp)}});
+var inp=el("textarea",{rows:"1",placeholder:"Message\u2026","aria-label":"Write a message",maxlength:"2000",autocomplete:"off",enterkeyhint:"send","data-k":"msg-"+id});
+var send=el("button",{class:"msend",type:"button","aria-label":"Send message",disabled:"disabled"},[ico("send")]);
+send.addEventListener("mousedown",function(e){e.preventDefault()});
+send.addEventListener("click",function(){sendMsg(id,inp);inp.focus()});
+var wrapper=el("div",{class:"mcwrap"},[]);
+var grow=function(){inp.style.height="auto";inp.style.height=Math.min(inp.scrollHeight,140)+"px";send.disabled=!inp.value.trim()};
+inp.addEventListener("input",grow);
+inp.addEventListener("focus",function(){wrapper.classList.remove("open");plus.setAttribute("aria-expanded","false")});
+inp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendMsg(id,inp)}});
 var ee0=function(t){var e=document.getElementById("merr");if(e)e.textContent=t};
 var pf=el("input",{type:"file",accept:"image/*,video/*",style:"display:none","aria-label":"Choose a photo or video",onchange:async function(e){
 var f=e.target.files[0];e.target.value="";if(!f)return;
@@ -1164,19 +1275,22 @@ var af=el("input",{type:"file",style:"display:none","aria-label":"Choose a file 
 var f=e.target.files[0];e.target.value="";if(!f)return;
 if(BAD_EXT.test(f.name)){ee0("That file type can\u2019t be sent.");return}
 showStage(id,f,"file",f.name,f.type)}});
-var tools=el("div",{class:"mtools"},[
-el("button",{class:"btn alt",type:"button",title:"Attach a file","aria-label":"Attach a file",onclick:function(){af.click()}},["\ud83d\udcce"]),
-el("button",{class:"btn alt",type:"button",title:"Send a photo or video","aria-label":"Send a photo or video",onclick:function(){pf.click()}},["\ud83d\uddbc\ufe0f"]),
-el("button",{class:"btn alt",type:"button",title:"Record a voice note","aria-label":"Record a voice note",onclick:function(){startRec(id)}},["\ud83c\udfa4"]),
-el("button",{class:"btn alt",type:"button",title:"Send a GIF","aria-label":"Send a GIF",onclick:function(){openGif(id,{sent:fullRefresh,file:function(f){showStage(id,f,"image",f.name,"image/gif")}})}},["GIF"]),
-el("button",{class:"btn alt",type:"button",title:"Share location","aria-label":"Share location",onclick:function(){openLoc(id,fullRefresh)}},["📍"])]);
+var plus=el("button",{class:"mplus",type:"button","aria-label":"Attach something","aria-expanded":"false","aria-controls":"mtray",onclick:function(){var o=wrapper.classList.toggle("open");plus.setAttribute("aria-expanded",String(o))}},[ico("plus")]);
+var chip=function(icon,label,fn){return el("button",{class:"mchip",type:"button",onclick:function(){wrapper.classList.remove("open");plus.setAttribute("aria-expanded","false");fn()}},[el("span",{class:"mci"},[icon]),label])};
+var tray=el("div",{class:"mtray",id:"mtray"},[
+chip("\ud83d\udcce","File",function(){af.click()}),
+chip("\ud83d\uddbc\ufe0f","Photo / video",function(){pf.click()}),
+chip("\ud83c\udfa4","Voice note",function(){startRec(id)}),
+chip("GIF","GIF",function(){openGif(id,{sent:fullRefresh,file:function(f){showStage(id,f,"image",f.name,"image/gif")}})}),
+chip("\ud83d\udccd","Location",function(){openLoc(id,fullRefresh)})]);
 var bar=el("div",{class:"mrec",id:"mrec"},[el("span",{},["\u25cf Recording"]),el("span",{class:"mt"},["0:00"]),
 el("button",{class:"btn alt",type:"button",onclick:function(){stopRec(false)}},["Cancel"]),
 el("button",{class:"btn",type:"button",onclick:function(){stopRec(true)}},["Send"])]);
-kids.push(bar,el("div",{class:"mstage",id:"mstage",style:"display:none"},[]),el("div",{class:"mcomp"},[pf,af,tools,inp,el("button",{class:"btn",type:"button",onclick:function(){sendMsg(id,inp)}},["Send"])]),el("p",{class:"msg",id:"merr",role:"alert"},[""]));
-setTimeout(function(){inp.focus()},50)}
-else kids.push(el("p",{class:"empty"},["You can only send messages to friends."]));
-return el("div",{class:"card"},kids)}
+[pf,af,tray,el("div",{class:"mcomp"},[plus,inp,send])].forEach(function(n){wrapper.appendChild(n)});
+kids.push(bar,el("div",{class:"mstage",id:"mstage",style:"display:none"},[]),wrapper,el("p",{class:"msg",id:"merr",role:"alert"},[""]));
+setTimeout(function(){grow();inp.focus()},50)}
+else kids.push(el("p",{class:"empty",style:"padding:12px 14px"},["You can only send messages to friends."]));
+return el("div",{class:"card chatcard"},kids)}
 function friendsOf(id){
 var seen={};
 D.fs.forEach(function(f){if(f.status!=="accepted")return;var o=f.requester===id?f.addressee:(f.addressee===id?f.requester:null);
