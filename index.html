@@ -244,6 +244,13 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 #livebar{position:fixed;left:50%;transform:translateX(-50%);top:calc(60px + env(safe-area-inset-top,0px));z-index:55;display:flex;flex-direction:column;gap:6px}
 #livebar .lrow{display:flex;align-items:center;gap:8px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:6px 10px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
 @media (max-width:640px){#chatpops{left:8px;right:8px}.cp{flex:1;width:auto}.cp:nth-child(n+2){display:none}}
+.av.sm{width:28px;height:28px;font-size:.8rem;flex:none}
+.brow{display:flex;align-items:flex-end;gap:6px;margin:4px 0}
+.brow.me{flex-direction:row-reverse}
+.cp .brow .b{margin:0;max-width:calc(100% - 36px)}
+.mrow{display:flex;align-items:flex-end;gap:8px;max-width:88%;align-self:flex-start}
+.mrow.me{flex-direction:row-reverse;align-self:flex-end}
+.mrow .mb{align-self:auto;max-width:calc(100% - 38px);min-width:0}
 </style>
 </head>
 <body>
@@ -850,7 +857,8 @@ var kids=[];
 if(m.media_type)kids.push(mediaHolder(m,function(){if(p.stick)p.body.scrollTop=p.body.scrollHeight}));
 var rb=richBody(m);if(rb)kids.push(rb);
 var node=el("div",{class:"b"+(m.sender===me.id?" me":"")},kids);
-p.body.appendChild(node);if(p.stick)p.body.scrollTop=p.body.scrollHeight;return node}
+var sa=av(m.sender);sa.classList.add("sm");
+p.body.appendChild(el("div",{class:"brow"+(m.sender===me.id?" me":"")},[sa,node]));if(p.stick)p.body.scrollTop=p.body.scrollHeight;return node}
 function popRead(id){sb.from("messages").update({read:true}).eq("sender",id).eq("recipient",me.id).eq("read",false).then(function(r){if(!r.error)checkMsgs()})}
 async function popHistory(id){
 var cols=["id,sender,recipient,body,created_at,media_path,media_type,media_name,media_size","id,sender,recipient,body,created_at"],r;
@@ -1105,7 +1113,7 @@ if(box.getAttribute("data-sig")!==sig2){
 var prev=box.firstChild,atBottom=!prev||!prev.scrollHeight||(prev.scrollHeight-prev.scrollTop-prev.clientHeight<60);
 box.setAttribute("data-sig",sig2);box.innerHTML="";
 var list=el("div",{class:"mlist"},th.length?th.map(function(m){var mine=m.sender===me.id;
-return el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[mediaEl(m),richBody(m)||"",el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)])])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
+var bub=el("div",{class:"mb"+(mine?" me":"")+(String(m.id).indexOf("tmp")===0?" wait":"")},[mediaEl(m),richBody(m)||"",el("small",{},[String(m.id).indexOf("tmp")===0?"Sending\u2026":ago(m.created_at)])]);var sa=av(m.sender);sa.classList.add("sm");return el("div",{class:"mrow"+(mine?" me":"")},[sa,bub])}):[el("p",{class:"empty"},["No messages yet. Say hi!"])]);
 box.appendChild(list);if(atBottom)list.scrollTop=list.scrollHeight;
 var need=th.filter(function(m){return m.media_path&&!murlGet(m.media_path)&&!(murl[m.media_path]&&murl[m.media_path].fail)}).map(function(m){return m.media_path});
 if(need.length)mediaUrls(need).then(function(ch){var b=document.getElementById("mbody");if(ch&&b){b.removeAttribute("data-sig");paintMsgs()}})}
