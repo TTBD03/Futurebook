@@ -210,8 +210,20 @@ header.top nav .nav,header.top nav .link{flex:none;white-space:nowrap;min-height
 .bgp{padding:36px 16px;font-size:1.3rem}
 }
 @media(max-width:380px){.card{padding:12px}.av{width:36px;height:36px}header.top .logo{font-size:1.3rem}}
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:min(92vw,420px);background:var(--card);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px 16px;border-radius:12px;text-decoration:none;font-weight:600;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
-#toast.show{opacity:1;pointer-events:auto}
+#chatpops{position:fixed;right:16px;bottom:0;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:10px;z-index:50;pointer-events:none}
+.cp{pointer-events:auto;width:300px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;box-shadow:0 6px 24px rgba(0,0,0,.28);overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0px)}
+.cph{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--pri);color:var(--onpri);cursor:pointer}
+.cph .av{width:28px;height:28px;font-size:.8rem;flex:none}
+.cph .cpt{flex:1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cph a,.cph button{color:var(--onpri);background:none;border:0;font-size:1rem;padding:4px 6px;text-decoration:none;cursor:pointer}
+.cpb{max-height:240px;min-height:60px;overflow-y:auto;padding:8px 10px}
+.cp .b{max-width:82%;width:fit-content;padding:6px 10px;border-radius:14px;margin:4px 0;background:var(--soft);overflow-wrap:anywhere}
+.cp .b.me{margin-left:auto;background:var(--pri);color:var(--onpri)}
+.cpf{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+.cpf input{flex:1;min-width:0}
+.cperr{display:block;color:var(--like);padding:0 10px 6px}
+.cp.min .cpb,.cp.min .cpf,.cp.min .cperr{display:none}
+@media (max-width:640px){#chatpops{left:8px;right:8px}.cp{flex:1;width:auto}.cp:nth-child(n+2){display:none}}
 </style>
 </head>
 <body>
@@ -414,7 +426,7 @@ if(r.error)return;D.notes.forEach(function(n){n.read=true});var b=document.getEl
 return el("div",{class:"card"},[el("h2",{},["Notifications"])].concat(items.length?items:[el("p",{class:"empty"},["Nothing yet. Friend requests, likes, comments and messages will show up here."])]))}
 var stab="account";
 function alertBlock(){
-var out=[el("h3",{class:"sub"},["Message alerts"]),el("p",{class:"empty"},["New messages show a pop-up and a count in the tab title while Futurebook is open."])];
+var out=[el("h3",{class:"sub"},["Message alerts"]),el("p",{class:"empty"},["New messages pop up in a small chat box you can reply from, and show a count in the tab title, while Futurebook is open."])];
 if(!window.Notification){out.push(el("p",{class:"empty"},["Your browser doesn’t support desktop alerts."]));return out}
 var pm=Notification.permission;
 if(pm==="granted")out.push(el("p",{class:"empty"},["Desktop alerts are on. They appear when Futurebook is open in another tab."]));
@@ -688,12 +700,48 @@ return el("div",{class:"card"},[el("h3",{},["Edit profile"])].concat(form,[el("d
 var M={list:[],pending:[],loaded:false,err:null,busy:false,marking:false},mUnread=0;
 function paintBell(){var b=document.getElementById("msgbell");if(b)b.textContent="Messages"+(mUnread?" ("+mUnread+")":"");document.title=(mUnread&&me?"("+mUnread+") ":"")+"Futurebook"}
 var seenM=null;
-function toast(txt,href){var t=document.getElementById("toast");if(!t){t=document.createElement("a");t.id="toast";t.setAttribute("role","status");document.body.appendChild(t)}
-t.textContent=txt;t.href=href;t.className="show";clearTimeout(toast.t);toast.t=setTimeout(function(){t.className=""},6000)}
+var pops={},popOrder=[];
+function popBox(){var b=document.getElementById("chatpops");if(!b){b=document.createElement("div");b.id="chatpops";document.body.appendChild(b)}return b}
+function closePop(id){var p=pops[id];if(!p)return;if(p.el.parentNode)p.el.parentNode.removeChild(p.el);delete pops[id];popOrder=popOrder.filter(function(x){return x!==id})}
+function closePops(){Object.keys(pops).forEach(closePop)}
+function popText(m){var t=m.media_type?({image:"📷 Photo",video:"🎥 Video",audio:"🎤 Voice note"}[m.media_type]||"📎 "+(m.media_name||"File")):"";return t+(t&&m.body?" ":"")+(m.body||"")}
+function popBubble(p,m){if(!m.id||p.ids[m.id])return;p.ids[m.id]=1;p.body.appendChild(el("div",{class:"b"+(m.sender===me.id?" me":"")},[popText(m)]));p.body.scrollTop=p.body.scrollHeight}
+function popRead(id){sb.from("messages").update({read:true}).eq("sender",id).eq("recipient",me.id).eq("read",false).then(function(r){if(!r.error)checkMsgs()})}
+async function popHistory(id){
+var cols=["id,sender,recipient,body,media_type,media_name,created_at","id,sender,recipient,body,created_at"],r;
+for(var i=0;i<cols.length;i++){r=await sb.from("messages").select(cols[i]).or("and(sender.eq."+me.id+",recipient.eq."+id+"),and(sender.eq."+id+",recipient.eq."+me.id+")").order("created_at",{ascending:false}).limit(6);if(!r.error)break}
+return r.error?null:(r.data||[]).slice().reverse()}
+function openPop(id,msgs){
+if(!me)return;
+var p=pops[id];
+if(p){msgs.forEach(function(m){popBubble(p,m)});return}
+if(popOrder.length>=3)closePop(popOrder[0]);
+var body=el("div",{class:"cpb","aria-live":"polite"}),err=el("small",{class:"cperr"},[]);
+var input=el("input",{placeholder:"Reply…","aria-label":"Reply to "+nm(id),maxlength:"2000",autocomplete:"off"});
+var send=el("button",{class:"btn",type:"button"},["Send"]);
+var win=el("div",{class:"cp",role:"dialog","aria-label":"Chat with "+nm(id)});
+var head=el("div",{class:"cph"},[av(id),el("span",{class:"cpt"},[nm(id)]),
+el("a",{href:"#messages/"+id,title:"Open full chat","aria-label":"Open full chat"},["⤢"]),
+el("button",{type:"button",title:"Close","aria-label":"Close chat",onclick:function(){closePop(id)}},["✕"])]);
+head.addEventListener("click",function(e){if(e.target.closest&&e.target.closest("a,button"))return;win.classList.toggle("min");if(!win.classList.contains("min"))popRead(id)});
+[head,body,el("div",{class:"cpf"},[input,send]),err].forEach(function(n){win.appendChild(n)});
+p={el:win,body:body,ids:{}};pops[id]=p;popOrder.push(id);popBox().appendChild(win);
+var asc=msgs.slice().reverse();asc.forEach(function(m){popBubble(p,m)});
+popHistory(id).then(function(h){if(h&&pops[id]===p){body.innerHTML="";p.ids={};h.forEach(function(m){popBubble(p,m)});asc.forEach(function(m){popBubble(p,m)})}});
+async function doSend(){
+var t=input.value.trim();if(!t)return;err.textContent="";input.value="";
+var r=await sb.from("messages").insert({sender:me.id,recipient:id,body:t.slice(0,2000)});
+if(r.error){input.value=t;var m2=r.error.message||"";err.textContent=/row-level|policy/i.test(m2)?"You can only message your friends.":"Couldn’t send. Try again.";return}
+popBubble(p,{id:"s"+Date.now(),sender:me.id,body:t});popRead(id)}
+send.addEventListener("click",doSend);
+input.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();doSend()}});
+input.addEventListener("focus",function(){popRead(id)});
+win.addEventListener("mousedown",function(){popRead(id)})}
 async function checkMsgs(){
 if(!me||needMfa)return;
 try{
-var r=await sb.from("messages").select("id,sender,body,media_type,media_name,created_at",{count:"exact"}).eq("recipient",me.id).eq("read",false).order("created_at",{ascending:false}).limit(30);
+var cols=["id,sender,body,media_type,media_name,created_at","id,sender,body,created_at"],r;
+for(var ci=0;ci<cols.length;ci++){r=await sb.from("messages").select(cols[ci],{count:"exact"}).eq("recipient",me.id).eq("read",false).order("created_at",{ascending:false}).limit(30);if(!r.error)break}
 if(r.error)return;
 var rows=(r.data||[]).filter(function(m){return !(D&&D.blocked&&D.blocked.indexOf(m.sender)>-1)});
 mUnread=rows.length>=30?(r.count||rows.length):rows.length;
@@ -702,13 +750,12 @@ if(seenM===null)seenM={};
 rows.forEach(function(m){seenM[m.id]=1});
 paintBell();
 if(!fresh.length)return;
-var rt=route(),viewing=rt.name==="messages"&&!document.hidden;
-if(viewing)return;
-var m0=fresh[0],who=D?nm(m0.sender):"Someone";
-var text=fresh.length>1?fresh.length+" new messages":who+": "+msgSnippet({sender:m0.sender,body:m0.body||"",media_type:m0.media_type,media_name:m0.media_name});
-var href="#messages"+(fresh.length>1?"":"/"+m0.sender);
-if(!document.hidden)toast(text,href);
-else if(window.Notification&&Notification.permission==="granted"){try{var nt=new Notification(fresh.length>1?"Futurebook":who,{body:fresh.length>1?text:msgSnippet({sender:m0.sender,body:m0.body||"",media_type:m0.media_type,media_name:m0.media_name}),tag:"fb-msg"});nt.onclick=function(){window.focus();location.hash=href;nt.close()}}catch(e){}}
+if(route().name==="messages"&&!document.hidden){closePops();return}
+var by={},order=[];fresh.forEach(function(m){if(!by[m.sender]){by[m.sender]=[];order.push(m.sender)}by[m.sender].push(m)});
+order.forEach(function(id){openPop(id,by[id])});
+if(document.hidden&&window.Notification&&Notification.permission==="granted"){
+var m0=fresh[0],who=D?nm(m0.sender):"Someone",many=fresh.length>1;
+try{var nt=new Notification(many?"Futurebook":who,{body:many?fresh.length+" new messages":popText(m0),tag:"fb-msg"});nt.onclick=function(){window.focus();location.hash="#messages"+(many?"":"/"+m0.sender);nt.close()}}catch(e){}}
 }catch(e){}}
 async function pollUnread(){if(!me)return;try{var r=await sb.from("messages").select("id",{count:"exact",head:true}).eq("recipient",me.id).eq("read",false);
 if(!r.error){mUnread=r.count||0;paintBell()}}catch(e){}}
@@ -1116,10 +1163,12 @@ document.addEventListener("pointerdown",function(e){if(openMenu&&!(e.target.clos
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu()});
 window.addEventListener("scroll",closeMenu,{passive:true});
 document.addEventListener("focusin",function(e){if(openMenu&&!(e.target.closest&&e.target.closest(".pmenu")))closeMenu()});
-sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;document.title="Futurebook";KEEP={};draw()}});
+sb.auth.onAuthStateChange(function(ev){if(ev==="PASSWORD_RECOVERY"){recovering=true;draw()}else if(ev==="SIGNED_OUT"){me=null;D=null;needMfa=false;mfaF=[];mfaEnroll=null;seenM=null;mUnread=0;closePops();document.title="Futurebook";KEEP={};draw()}});
 window.addEventListener("hashchange",function(){say("");ptab="posts";stab="account";editing=false;draft=null;X={};draw();window.scrollTo(0,0);if(me&&D){var rn=route().name;if(rn==="profile"||rn==="post")refresh()}});
 refresh();
 setInterval(checkMsgs,15000);
+setInterval(function(){if(Object.keys(pops).length&&!document.hidden)checkMsgs()},4000);
+window.addEventListener("hashchange",function(){if(me&&route().name==="messages")closePops()});
 setInterval(function(){if(me&&D&&!document.hidden&&route().name==="messages"){M.busy=false;loadMsgs().then(paintMsgs)}},5000);
 setInterval(async function(){
 if(!me||needMfa)return;
